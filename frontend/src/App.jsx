@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Dashboard from './pages/Dashboard';
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useContext(AuthContext);
@@ -12,28 +13,6 @@ const ProtectedRoute = ({ children }) => {
 const GuestRoute = ({ children }) => {
   const { user } = useContext(AuthContext);
   return !user ? children : <Navigate to="/" replace />;
-};
-
-const DashboardPlaceholder = () => {
-  const { logout, user } = useContext(AuthContext);
-  return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      <h1>Dashboard (Placeholder)</h1>
-      <p>Logged in as: {user?.name}</p>
-      <button 
-        onClick={logout} 
-        style={{ 
-          marginTop: '20px', 
-          backgroundColor: '#ef4444', 
-          color: '#ffffff', 
-          padding: '8px 16px', 
-          borderRadius: '4px' 
-        }}
-      >
-        Sign Out
-      </button>
-    </div>
-  );
 };
 
 const BoardPlaceholder = () => {
@@ -52,7 +31,7 @@ const App = () => {
           path="/"
           element={
             <ProtectedRoute>
-              <DashboardPlaceholder />
+              <Dashboard />
             </ProtectedRoute>
           }
         />
