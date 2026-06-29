@@ -1,10 +1,12 @@
 import express from 'express';
+import http from 'http';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import userRoutes from './routes/userRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
+import { initSocket } from './socket/socketManager.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -12,6 +14,9 @@ dotenv.config();
 connectDB();
 
 const app = express();
+const server = http.createServer(app);
+
+initSocket(server);
 
 app.use(cors({
   origin: process.env.CLIENT_URL,
@@ -34,6 +39,6 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
