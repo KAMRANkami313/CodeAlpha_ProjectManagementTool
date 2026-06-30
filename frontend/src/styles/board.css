@@ -481,3 +481,34 @@ input[type="date"] {
     max-height: none;
   }
 }
+
+.modal-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.modal-error-inline {
+  margin: 8px 0;
+}
+
+.task-assignee-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.task-assignee-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-unassigned {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}

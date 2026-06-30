@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const DEFAULT_TIMEOUT_MS = 15000;
 
 const getHeaders = () => {
   const token = localStorage.getItem('token');
@@ -11,11 +12,6 @@ const getHeaders = () => {
   return headers;
 };
 
-/**
- * When a request comes back 401 (expired/invalid token), broadcast a
- * window event so AuthContext can log the user out and redirect to /login,
- * instead of leaving the UI in a broken "logged in but every call fails" state.
- */
 const handleResponse = async (response) => {
   let data;
   try {
@@ -29,43 +25,53 @@ const handleResponse = async (response) => {
   }
 
   if (!response.ok) {
-    throw new Error(data.message || 'Something went wrong');
+    const message = data.message || 'Something went wrong';
+    const error = new Error(message);
+    error.status = response.status;
+    error.errors = data.errors;
+    throw error;
   }
   return data;
 };
 
+const request = async (endpoint, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers: { ...getHeaders(), ...options.headers },
+      signal: controller.signal,
+    });
+    return await handleResponse(response);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your connection and try again.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const api = {
-  get: async (endpoint) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'GET',
-      headers: getHeaders(),
-    });
-    return handleResponse(response);
-  },
-  post: async (endpoint, body) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
+  get: (endpoint) => request(endpoint, { method: 'GET' }),
+  post: (endpoint, body) =>
+    request(endpoint, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(body),
-    });
-    return handleResponse(response);
-  },
-  put: async (endpoint, body) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(body),
-    });
-    return handleResponse(response);
-  },
-  delete: async (endpoint, body) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: getHeaders(),
       body: body ? JSON.stringify(body) : undefined,
-    });
-    return handleResponse(response);
-  },
+    }),
+  put: (endpoint, body) =>
+    request(endpoint, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  delete: (endpoint, body) =>
+    request(endpoint, {
+      method: 'DELETE',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
 };
 
 export { API_URL };

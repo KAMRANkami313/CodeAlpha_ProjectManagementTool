@@ -4,22 +4,18 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 let socket = null;
 
-/**
- * Lazily creates (or reuses) a single authenticated socket connection for
- * the lifetime of a logged-in session. Call disconnectSocket() on logout.
- */
 const getSocket = (token) => {
-  if (socket && socket.connected) return socket;
-
-  if (!socket) {
-    socket = io(SOCKET_URL, {
-      autoConnect: false,
-      auth: { token },
-      withCredentials: true,
-    });
-  } else {
-    socket.auth = { token };
+  if (socket) {
+    if (socket.connected) return socket;
+    socket.connect();
+    return socket;
   }
+
+  socket = io(SOCKET_URL, {
+    autoConnect: false,
+    auth: { token },
+    withCredentials: true,
+  });
 
   socket.connect();
   return socket;
@@ -27,6 +23,7 @@ const getSocket = (token) => {
 
 const disconnectSocket = () => {
   if (socket) {
+    socket.removeAllListeners();
     socket.disconnect();
     socket = null;
   }

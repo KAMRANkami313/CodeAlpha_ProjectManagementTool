@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { disconnectSocket } from '../services/socket';
 
@@ -15,7 +15,8 @@ const readStoredUser = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(readStoredUser);
-  const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(() => Boolean(readStoredUser()));
+  const initializedRef = useRef(false);
 
   const persistSession = (data) => {
     const sessionUser = { _id: data._id, name: data.name, email: data.email };
@@ -41,7 +42,29 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
-  // If any API call comes back 401, the session is no longer valid - log out.
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    const validateSession = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setInitializing(false);
+        return;
+      }
+
+      try {
+        await api.get('/users/profile');
+      } catch {
+        logout();
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    validateSession();
+  }, [logout]);
+
   useEffect(() => {
     const handleUnauthorized = () => logout();
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -49,7 +72,7 @@ export const AuthProvider = ({ children }) => {
   }, [logout]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, initializing, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

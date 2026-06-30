@@ -35,7 +35,9 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
 
     const handleNewComment = (payload) => {
       if (payload.taskId !== task._id) return;
-      setComments((prev) => [...prev, payload.comment]);
+      setComments((prev) =>
+        prev.some((c) => c._id === payload.comment._id) ? prev : [...prev, payload.comment]
+      );
     };
 
     socket.on('comment:created', handleNewComment);
@@ -53,9 +55,9 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
     setError('');
     try {
       const newComment = await api.post(`/tasks/${task._id}/comments`, { content });
-      // The author's own comment is added optimistically; the server-broadcast
-      // copy will be ignored by other clients deduping on _id if desired.
-      setComments((prev) => [...prev, newComment]);
+      setComments((prev) =>
+        prev.some((c) => c._id === newComment._id) ? prev : [...prev, newComment]
+      );
       setContent('');
     } catch (err) {
       setError(err.message || 'Failed to post comment');
@@ -69,7 +71,7 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
       <div className="modal-container comments-modal">
         <div className="modal-header">
           <h3 className="modal-title">{task.title}</h3>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="modal-header-actions">
             <button className="modal-close" onClick={onEdit} title="Edit task">
               <Pencil size={18} />
             </button>
@@ -117,7 +119,7 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
           <div ref={bottomRef} />
         </div>
 
-        {error && <div className="auth-error" style={{ margin: '8px 0' }}>{error}</div>}
+        {error && <div className="auth-error modal-error-inline">{error}</div>}
 
         <form className="comment-input-row" onSubmit={handleSend}>
           <input
