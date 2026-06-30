@@ -1,15 +1,20 @@
 import { validationResult } from 'express-validator';
 
-/**
- * Runs after an array of express-validator checks. Collects errors into
- * a single 400 response instead of every controller reimplementing this.
- */
 const validate = (req, res, next) => {
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
-    res.status(400);
-    return next(new Error(errors.array()[0].msg));
+    const errorList = errors.array().map((err) => ({
+      field: err.path,
+      message: err.msg,
+    }));
+
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: errorList,
+    });
   }
+
   next();
 };
 

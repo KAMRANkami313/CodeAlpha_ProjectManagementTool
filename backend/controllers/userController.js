@@ -1,20 +1,42 @@
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
 
+const DUPLICATE_KEY_CODE = 11000;
+
+const isDuplicateKeyError = (error) =>
+  error?.code === DUPLICATE_KEY_CODE || error?.message?.includes('E11000');
+
 const registerUser = async (req, res, next) => {
   const { name, email, password } = req.body;
 
   try {
-    const userExists = await User.findOne({ email });
-
-    if (userExists) {
-      res.status(400);
-      throw new Error('User already exists');
-    }
-
     const user = await User.create({ name, email, password });
 
     res.status(201).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user._id),
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
+    next(error);
+  }
+};
+
+const authUser = async (req, res, next) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
@@ -25,53 +47,36 @@ const registerUser = async (req, res, next) => {
   }
 };
 
-const authUser = async (req, res, next) => {
-  const { email, password } = req.body;
-
-  try {
-    const user = await User.findOne({ email });
-
-    if (user && (await user.comparePassword(password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        token: generateToken(user._id),
-      });
-    } else {
-      res.status(401);
-      throw new Error('Invalid email or password');
-    }
-  } catch (error) {
-    next(error);
-  }
-};
-
 const getUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      res.status(404);
-      throw new Error('User not found');
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json({ _id: user._id, name: user.name, email: user.email });
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * Lightweight lookup so the frontend can show "is this a valid email to
- * invite" feedback before submitting the add-member form.
- */
 const searchUsersByEmail = async (req, res, next) => {
   try {
     const { query } = req.query;
-    if (!query || query.length < 2) return res.json([]);
 
-    const users = await User.find({ email: { $regex: query, $options: 'i' } })
+    if (!query || query.trim().length < 3) {
+      return res.json([]);
+    }
+
+    const users = await User.find({
+      email: { $regex: query.trim(), $options: 'i' },
+    })
       .select('name email')
       .limit(5);
 
