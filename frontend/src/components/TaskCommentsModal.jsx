@@ -10,7 +10,7 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
-  const socket = useSocket();
+  const { socket } = useSocket();
   const bottomRef = useRef(null);
   const containerRef = useRef(null);
 
