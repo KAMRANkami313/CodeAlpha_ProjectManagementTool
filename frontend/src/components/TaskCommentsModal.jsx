@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Send, Pencil } from 'lucide-react';
 import { api } from '../services/api';
 import { useSocket } from '../context/SocketContext';
+import useModal from '../hooks/useModal';
 
 const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
   const [comments, setComments] = useState([]);
@@ -11,6 +12,9 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
   const [sending, setSending] = useState(false);
   const socket = useSocket();
   const bottomRef = useRef(null);
+  const containerRef = useRef(null);
+
+  useModal(true, onClose, containerRef);
 
   useEffect(() => {
     let active = true;
@@ -66,16 +70,26 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
     }
   };
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
   return (
-    <div className="modal-overlay animate-fade-in">
-      <div className="modal-container comments-modal">
+    <div className="modal-overlay animate-fade-in" onClick={handleOverlayClick}>
+      <div
+        className="modal-container comments-modal"
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="comments-modal-title"
+      >
         <div className="modal-header">
-          <h3 className="modal-title">{task.title}</h3>
+          <h3 className="modal-title" id="comments-modal-title">{task.title}</h3>
           <div className="modal-header-actions">
-            <button className="modal-close" onClick={onEdit} title="Edit task">
+            <button className="modal-close" onClick={onEdit} title="Edit task" aria-label="Edit task">
               <Pencil size={18} />
             </button>
-            <button className="modal-close" onClick={onClose}>
+            <button className="modal-close" onClick={onClose} aria-label="Close">
               <X size={20} />
             </button>
           </div>

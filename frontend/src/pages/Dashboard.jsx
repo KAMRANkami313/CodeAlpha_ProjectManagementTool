@@ -62,7 +62,7 @@ const Dashboard = () => {
       <main className="main-content">
         <header className="main-header">
           <h1 className="main-title">My Workspaces</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="main-header-actions">
             <NotificationBell />
             <button className="create-project-btn" onClick={() => setShowModal(true)}>
               <Plus size={18} />
@@ -71,16 +71,16 @@ const Dashboard = () => {
           </div>
         </header>
 
-        {error && <div className="auth-error" style={{ marginBottom: '24px' }}>{error}</div>}
+        {error && <div className="auth-error main-error-block">{error}</div>}
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px' }}>Loading projects...</div>
+          <div className="state-message">Loading projects...</div>
         ) : projects.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-            <Folder size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '16px' }} />
+          <div className="empty-state">
+            <Folder size={48} className="empty-state-icon" />
             <h3>No projects found</h3>
-            <p style={{ color: 'var(--color-text-muted)', margin: '8px 0 20px' }}>Get started by creating your first collaborative workspace project board.</p>
-            <button className="create-project-btn" style={{ margin: '0 auto' }} onClick={() => setShowModal(true)}>
+            <p className="empty-state-text">Get started by creating your first collaborative workspace project board.</p>
+            <button className="create-project-btn empty-state-btn" onClick={() => setShowModal(true)}>
               <Plus size={18} />
               <span>Create Project</span>
             </button>
@@ -92,7 +92,7 @@ const Dashboard = () => {
                 <div>
                   <div className="project-card-header">
                     <h3 className="project-card-title">{project.name}</h3>
-                    <Folder size={18} style={{ color: 'var(--color-primary)' }} />
+                    <Folder size={18} className="project-card-icon" />
                   </div>
                   <p className="project-card-description">{project.description || 'No description provided.'}</p>
                 </div>
@@ -101,7 +101,7 @@ const Dashboard = () => {
                     <User size={12} />
                     <span>Owner: {project.owner?.name === user?.name ? 'Me' : project.owner?.name}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div className="project-card-date">
                     <Calendar size={12} />
                     <span>{new Date(project.createdAt).toLocaleDateString()}</span>
                   </div>

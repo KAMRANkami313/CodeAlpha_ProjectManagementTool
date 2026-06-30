@@ -1,15 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
+import useModal from '../hooks/useModal';
 
 const STATUSES = ['Todo', 'In Progress', 'In Review', 'Done'];
 const PRIORITIES = ['Low', 'Medium', 'High'];
 
-/**
- * Handles both creation (task=null) and editing (task provided).
- * Real-time propagation to other members happens server-side via sockets;
- * this component only needs to update local state via onSaved/onDeleted.
- */
 const TaskModal = ({ projectId, members, task, defaultStatus, onClose, onSaved, onDeleted }) => {
   const isEditing = Boolean(task);
 
@@ -21,6 +17,9 @@ const TaskModal = ({ projectId, members, task, defaultStatus, onClose, onSaved, 
   const [dueDate, setDueDate] = useState(task?.dueDate ? task.dueDate.slice(0, 10) : '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const containerRef = useRef(null);
+
+  useModal(true, onClose, containerRef);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -63,17 +62,27 @@ const TaskModal = ({ projectId, members, task, defaultStatus, onClose, onSaved, 
     }
   };
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
   return (
-    <div className="modal-overlay animate-fade-in">
-      <div className="modal-container">
+    <div className="modal-overlay animate-fade-in" onClick={handleOverlayClick}>
+      <div
+        className="modal-container"
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-modal-title"
+      >
         <div className="modal-header">
-          <h3 className="modal-title">{isEditing ? 'Edit Task' : 'New Task'}</h3>
-          <button className="modal-close" onClick={onClose}>
+          <h3 className="modal-title" id="task-modal-title">{isEditing ? 'Edit Task' : 'New Task'}</h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>
         </div>
 
-        {error && <div className="auth-error" style={{ marginBottom: '16px' }}>{error}</div>}
+        {error && <div className="auth-error modal-error-block">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
@@ -149,7 +158,7 @@ const TaskModal = ({ projectId, members, task, defaultStatus, onClose, onSaved, 
             </div>
           </div>
 
-          <div className="modal-footer" style={{ justifyContent: isEditing ? 'space-between' : 'flex-end' }}>
+          <div className={`modal-footer ${isEditing ? 'modal-footer-edit' : ''}`}>
             {isEditing && (
               <button
                 type="button"
@@ -161,11 +170,11 @@ const TaskModal = ({ projectId, members, task, defaultStatus, onClose, onSaved, 
                 Delete
               </button>
             )}
-            <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+            <div className="modal-footer-actions">
               <button className="btn-secondary" type="button" onClick={onClose} disabled={saving}>
                 Cancel
               </button>
-              <button className="auth-btn" style={{ marginTop: 0 }} type="submit" disabled={saving}>
+              <button className="auth-btn modal-submit-btn" type="submit" disabled={saving}>
                 {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Task'}
               </button>
             </div>

@@ -24,8 +24,8 @@ const Board = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [activeTask, setActiveTask] = useState(null); // task being viewed in comments modal
-  const [editingTask, setEditingTask] = useState(undefined); // undefined = closed, null = create, task = edit
+  const [activeTask, setActiveTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(undefined);
   const [createStatus, setCreateStatus] = useState('Todo');
   const [showMembers, setShowMembers] = useState(false);
 
@@ -55,7 +55,6 @@ const Board = () => {
     };
   }, [projectId]);
 
-  // --- Real-time sync: server is authoritative, we just merge incoming events ---
   useEffect(() => {
     if (!socket) return;
 
@@ -118,7 +117,6 @@ const Board = () => {
       if (!task || task.status === newStatus) {
         return;
       }
-      // Optimistic update; server confirmation arrives via socket and reconciles.
       setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)));
       try {
         await api.put(`/tasks/${taskId}`, { status: newStatus });
@@ -131,16 +129,14 @@ const Board = () => {
   );
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading board...</div>;
+    return <div className="state-message">Loading board...</div>;
   }
 
   if (error && !project) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <p className="auth-error" style={{ display: 'inline-block' }}>{error}</p>
-        <div style={{ marginTop: '16px' }}>
-          <Link to="/" className="auth-link">Back to dashboard</Link>
-        </div>
+      <div className="board-error-state">
+        <p className="auth-error board-error-inline">{error}</p>
+        <Link to="/" className="auth-link">Back to dashboard</Link>
       </div>
     );
   }
@@ -149,7 +145,7 @@ const Board = () => {
     <div className="board-page">
       <header className="board-header">
         <div className="board-header-left">
-          <Link to="/" className="board-back-link">
+          <Link to="/" className="board-back-link" aria-label="Back to dashboard">
             <ArrowLeft size={18} />
           </Link>
           <div>
@@ -167,7 +163,7 @@ const Board = () => {
         </div>
       </header>
 
-      {error && <div className="auth-error" style={{ margin: '0 32px 16px' }}>{error}</div>}
+      {error && <div className="auth-error board-error-block">{error}</div>}
 
       <div className="board-columns">
         {STATUSES.map((status) => (
@@ -193,6 +189,7 @@ const Board = () => {
           setEditingTask(null);
         }}
         title="Add a task"
+        aria-label="Add a task"
       >
         <Plus size={22} />
       </button>
