@@ -7,7 +7,7 @@ export const NotificationContext = createContext(null);
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useContext(AuthContext);
-  const socket = useSocket();
+  const { socket } = useSocket();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -18,7 +18,6 @@ export const NotificationProvider = ({ children }) => {
       setNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
     } catch {
-      // Silently ignore - notification bell just stays empty.
     }
   }, [user]);
 
@@ -51,7 +50,6 @@ export const NotificationProvider = ({ children }) => {
     try {
       await api.put(`/notifications/${id}/read`);
     } catch {
-      // Best-effort; a stale unread count is not worth blocking the UI for.
     }
   };
 
@@ -61,7 +59,6 @@ export const NotificationProvider = ({ children }) => {
     try {
       await api.put('/notifications/read-all');
     } catch {
-      // Best-effort.
     }
   };
 

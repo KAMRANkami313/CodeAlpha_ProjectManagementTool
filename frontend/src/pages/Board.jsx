@@ -10,13 +10,14 @@ import TaskModal from '../components/TaskModal';
 import TaskCommentsModal from '../components/TaskCommentsModal';
 import MembersModal from '../components/MembersModal';
 import NotificationBell from '../components/NotificationBell';
+import ReconnectionBanner from '../components/ReconnectionBanner';
 
 const STATUSES = ['Todo', 'In Progress', 'In Review', 'Done'];
 
 const Board = () => {
   const { projectId } = useParams();
   const { user } = useContext(AuthContext);
-  const socket = useSocket();
+  const { socket } = useSocket();
   useProjectRoom(projectId);
 
   const [project, setProject] = useState(null);
@@ -143,6 +144,7 @@ const Board = () => {
 
   return (
     <div className="board-page">
+      <ReconnectionBanner />
       <header className="board-header">
         <div className="board-header-left">
           <Link to="/" className="board-back-link" aria-label="Back to dashboard">

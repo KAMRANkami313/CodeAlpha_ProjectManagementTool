@@ -45,3 +45,79 @@ textarea:focus,
 select:focus {
   border-color: var(--color-primary);
 }
+
+.page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: var(--spacing-md);
+  background-color: var(--color-background);
+}
+
+.page-loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--color-surface-hover);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.page-loader-label {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.reconnection-banner {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background-color: var(--color-warning);
+  color: #1a1a1a;
+  padding: var(--spacing-sm) var(--spacing-md);
+  animation: fadeIn var(--transition-normal) forwards;
+}
+
+.reconnection-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  max-width: 1200px;
+  margin: 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reconnection-banner-icon {
+  flex-shrink: 0;
+}
+
+.reconnection-banner-text {
+  flex: 1;
+  text-align: center;
+}
+
+.reconnection-banner-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: rgba(0, 0, 0, 0.15);
+  color: #1a1a1a;
+  padding: 4px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reconnection-banner-btn:hover {
+  background-color: rgba(0, 0, 0, 0.3);
+}
