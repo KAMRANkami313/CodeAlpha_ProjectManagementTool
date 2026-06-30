@@ -1,55 +1,63 @@
 import Notification from '../models/Notification.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import AppError from '../utils/AppError.js';
+import { parsePagination, isPaginated, buildPaginationMeta } from '../utils/pagination.js';
 
-const getNotifications = async (req, res, next) => {
-  try {
-    const notifications = await Notification.find({ recipient: req.user._id })
+const getNotifications = asyncHandler(async (req, res) => {
+  const filter = { recipient: req.user._id };
+
+  if (isPaginated(req)) {
+    const { page, limit, skip } = parsePagination(req);
+    const [notifications, total, unreadCount] = await Promise.all([
+      Notification.find(filter)
+        .populate('sender', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Notification.countDocuments(filter),
+      Notification.countDocuments({ ...filter, isRead: false }),
+    ]);
+    return res.json({
+      notifications,
+      unreadCount,
+      pagination: buildPaginationMeta(page, limit, total),
+    });
+  }
+
+  const [notifications, unreadCount] = await Promise.all([
+    Notification.find(filter)
       .populate('sender', 'name email')
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50),
+    Notification.countDocuments({ ...filter, isRead: false }),
+  ]);
 
-    const unreadCount = await Notification.countDocuments({
-      recipient: req.user._id,
-      isRead: false,
-    });
+  res.json({ notifications, unreadCount });
+});
 
-    res.json({ notifications, unreadCount });
-  } catch (error) {
-    next(error);
+const markNotificationRead = asyncHandler(async (req, res) => {
+  const notification = await Notification.findOne({
+    _id: req.params.id,
+    recipient: req.user._id,
+  });
+
+  if (!notification) {
+    throw new AppError('Notification not found', 404);
   }
-};
 
-const markNotificationRead = async (req, res, next) => {
-  try {
-    const notification = await Notification.findOne({
-      _id: req.params.id,
-      recipient: req.user._id,
-    });
+  notification.isRead = true;
+  await notification.save();
 
-    if (!notification) {
-      res.status(404);
-      throw new Error('Notification not found');
-    }
+  res.json(notification);
+});
 
-    notification.isRead = true;
-    await notification.save();
+const markAllNotificationsRead = asyncHandler(async (req, res) => {
+  await Notification.updateMany(
+    { recipient: req.user._id, isRead: false },
+    { $set: { isRead: true } }
+  );
 
-    res.json(notification);
-  } catch (error) {
-    next(error);
-  }
-};
-
-const markAllNotificationsRead = async (req, res, next) => {
-  try {
-    await Notification.updateMany(
-      { recipient: req.user._id, isRead: false },
-      { $set: { isRead: true } }
-    );
-
-    res.json({ message: 'All notifications marked as read' });
-  } catch (error) {
-    next(error);
-  }
-};
+  res.json({ message: 'All notifications marked as read' });
+});
 
 export { getNotifications, markNotificationRead, markAllNotificationsRead };

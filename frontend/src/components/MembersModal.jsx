@@ -31,7 +31,7 @@ const MembersModal = ({ project, currentUser, onClose, onMembersUpdated }) => {
   const handleRemove = async (userId) => {
     if (!window.confirm('Remove this member from the project?')) return;
     try {
-      await api.delete(`/projects/${project._id}/members`, { userId });
+      await api.delete(`/projects/${project._id}/members/${userId}`);
       onMembersUpdated({
         ...project,
         members: project.members.filter((m) => m._id !== userId),

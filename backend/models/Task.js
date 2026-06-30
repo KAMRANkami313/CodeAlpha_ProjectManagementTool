@@ -4,8 +4,9 @@ const taskSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: true,
+      required: [true, 'Task title is required'],
       trim: true,
+      maxlength: [200, 'Task title cannot exceed 200 characters'],
     },
     description: {
       type: String,
@@ -52,6 +53,8 @@ const taskSchema = new mongoose.Schema(
 );
 
 taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ createdBy: 1 });
 
 const Task = mongoose.model('Task', taskSchema);
 export default Task;

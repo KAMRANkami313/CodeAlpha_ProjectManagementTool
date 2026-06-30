@@ -26,6 +26,6 @@ router.route('/:id')
   .delete(mongoIdParam('id'), validate, deleteProject);
 
 router.post('/:id/members', mongoIdParam('id'), addMemberRules, validate, addProjectMember);
-router.delete('/:id/members', mongoIdParam('id'), validate, removeProjectMember);
+router.delete('/:id/members/:userId', mongoIdParam('id'), mongoIdParam('userId'), validate, removeProjectMember);
 
 export default router;
