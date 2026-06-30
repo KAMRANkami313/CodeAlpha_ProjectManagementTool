@@ -12,23 +12,14 @@ const registerUser = async (req, res, next) => {
       throw new Error('User already exists');
     }
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-    });
+    const user = await User.create({ name, email, password });
 
-    if (user) {
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        token: generateToken(user._id),
-      });
-    } else {
-      res.status(400);
-      throw new Error('Invalid user data');
-    }
+    res.status(201).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user._id),
+    });
   } catch (error) {
     next(error);
   }
@@ -60,19 +51,34 @@ const getUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
 
-    if (user) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-      });
-    } else {
+    if (!user) {
       res.status(404);
       throw new Error('User not found');
     }
+
+    res.json({ _id: user._id, name: user.name, email: user.email });
   } catch (error) {
     next(error);
   }
 };
 
-export { registerUser, authUser, getUserProfile };
+/**
+ * Lightweight lookup so the frontend can show "is this a valid email to
+ * invite" feedback before submitting the add-member form.
+ */
+const searchUsersByEmail = async (req, res, next) => {
+  try {
+    const { query } = req.query;
+    if (!query || query.length < 2) return res.json([]);
+
+    const users = await User.find({ email: { $regex: query, $options: 'i' } })
+      .select('name email')
+      .limit(5);
+
+    res.json(users);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { registerUser, authUser, getUserProfile, searchUsersByEmail };

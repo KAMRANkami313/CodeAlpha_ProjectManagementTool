@@ -23,5 +23,7 @@ const commentSchema = new mongoose.Schema(
   }
 );
 
+commentSchema.index({ task: 1, createdAt: 1 });
+
 const Comment = mongoose.model('Comment', commentSchema);
 export default Comment;

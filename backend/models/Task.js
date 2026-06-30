@@ -10,6 +10,7 @@ const taskSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
+      default: '',
     },
     status: {
       type: String,
@@ -31,15 +32,26 @@ const taskSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
     dueDate: {
       type: Date,
       default: null,
+    },
+    position: {
+      type: Number,
+      default: 0,
     },
   },
   {
     timestamps: true,
   }
 );
+
+taskSchema.index({ project: 1, status: 1 });
 
 const Task = mongoose.model('Task', taskSchema);
 export default Task;

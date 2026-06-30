@@ -1,0 +1,139 @@
+import { useState, useEffect, useRef } from 'react';
+import { X, Send, Pencil } from 'lucide-react';
+import { api } from '../services/api';
+import { useSocket } from '../context/SocketContext';
+
+const TaskCommentsModal = ({ task, currentUser, onClose, onEdit }) => {
+  const [comments, setComments] = useState([]);
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sending, setSending] = useState(false);
+  const socket = useSocket();
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadComments = async () => {
+      try {
+        const data = await api.get(`/tasks/${task._id}/comments`);
+        if (active) setComments(data);
+      } catch (err) {
+        if (active) setError(err.message || 'Failed to load comments');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadComments();
+    return () => {
+      active = false;
+    };
+  }, [task._id]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewComment = (payload) => {
+      if (payload.taskId !== task._id) return;
+      setComments((prev) => [...prev, payload.comment]);
+    };
+
+    socket.on('comment:created', handleNewComment);
+    return () => socket.off('comment:created', handleNewComment);
+  }, [socket, task._id]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+    setSending(true);
+    setError('');
+    try {
+      const newComment = await api.post(`/tasks/${task._id}/comments`, { content });
+      // The author's own comment is added optimistically; the server-broadcast
+      // copy will be ignored by other clients deduping on _id if desired.
+      setComments((prev) => [...prev, newComment]);
+      setContent('');
+    } catch (err) {
+      setError(err.message || 'Failed to post comment');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay animate-fade-in">
+      <div className="modal-container comments-modal">
+        <div className="modal-header">
+          <h3 className="modal-title">{task.title}</h3>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button className="modal-close" onClick={onEdit} title="Edit task">
+              <Pencil size={18} />
+            </button>
+            <button className="modal-close" onClick={onClose}>
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="task-detail-meta">
+          <span className="priority-badge">{task.priority}</span>
+          <span>{task.status}</span>
+          {task.assignedTo && <span>Assigned to {task.assignedTo.name}</span>}
+        </div>
+
+        {task.description && <p className="task-detail-description">{task.description}</p>}
+
+        <div className="comments-thread">
+          {loading ? (
+            <div className="comments-empty">Loading comments...</div>
+          ) : comments.length === 0 ? (
+            <div className="comments-empty">No comments yet. Start the discussion.</div>
+          ) : (
+            comments.map((comment) => (
+              <div
+                key={comment._id}
+                className={`comment-item ${comment.user._id === currentUser?._id ? 'comment-own' : ''}`}
+              >
+                <div className="comment-avatar">{comment.user.name.charAt(0).toUpperCase()}</div>
+                <div className="comment-bubble">
+                  <div className="comment-meta">
+                    <span className="comment-author">{comment.user.name}</span>
+                    <span className="comment-time">
+                      {new Date(comment.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <p>{comment.content}</p>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {error && <div className="auth-error" style={{ margin: '8px 0' }}>{error}</div>}
+
+        <form className="comment-input-row" onSubmit={handleSend}>
+          <input
+            type="text"
+            placeholder="Write a comment..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            disabled={sending}
+          />
+          <button type="submit" className="auth-btn comment-send-btn" disabled={sending || !content.trim()}>
+            <Send size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default TaskCommentsModal;

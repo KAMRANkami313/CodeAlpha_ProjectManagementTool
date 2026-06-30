@@ -4,6 +4,7 @@ import { AuthContext } from './context/AuthContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import Board from './pages/Board';
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useContext(AuthContext);
@@ -13,14 +14,6 @@ const ProtectedRoute = ({ children }) => {
 const GuestRoute = ({ children }) => {
   const { user } = useContext(AuthContext);
   return !user ? children : <Navigate to="/" replace />;
-};
-
-const BoardPlaceholder = () => {
-  return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      <h1>Project Board (Placeholder)</h1>
-    </div>
-  );
 };
 
 const App = () => {
@@ -39,7 +32,7 @@ const App = () => {
           path="/project/:projectId"
           element={
             <ProtectedRoute>
-              <BoardPlaceholder />
+              <Board />
             </ProtectedRoute>
           }
         />

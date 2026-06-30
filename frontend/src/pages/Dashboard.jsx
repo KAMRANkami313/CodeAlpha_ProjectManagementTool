@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { api } from '../services/api';
 import CreateProjectModal from '../components/CreateProjectModal';
+import NotificationBell from '../components/NotificationBell';
 import { Kanban, Folder, Plus, LogOut, User, Calendar } from 'lucide-react';
 
 const Dashboard = () => {
@@ -61,10 +62,13 @@ const Dashboard = () => {
       <main className="main-content">
         <header className="main-header">
           <h1 className="main-title">My Workspaces</h1>
-          <button className="create-project-btn" onClick={() => setShowModal(true)}>
-            <Plus size={18} />
-            <span>New Project</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <NotificationBell />
+            <button className="create-project-btn" onClick={() => setShowModal(true)}>
+              <Plus size={18} />
+              <span>New Project</span>
+            </button>
+          </div>
         </header>
 
         {error && <div className="auth-error" style={{ marginBottom: '24px' }}>{error}</div>}

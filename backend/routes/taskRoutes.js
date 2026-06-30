@@ -9,24 +9,26 @@ import {
   getTaskComments,
 } from '../controllers/taskController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { validate } from '../middleware/validate.js';
+import { taskRules, taskUpdateRules, commentRules, mongoIdParam } from '../validators/rules.js';
 
 const router = express.Router();
 
 router.use(protect);
 
 router.route('/')
-  .post(createTask);
-
-router.route('/:id')
-  .get(getTaskById)
-  .put(updateTask)
-  .delete(deleteTask);
+  .post(taskRules, validate, createTask);
 
 router.route('/project/:projectId')
-  .get(getProjectTasks);
+  .get(mongoIdParam('projectId'), validate, getProjectTasks);
+
+router.route('/:id')
+  .get(mongoIdParam('id'), validate, getTaskById)
+  .put(mongoIdParam('id'), taskUpdateRules, validate, updateTask)
+  .delete(mongoIdParam('id'), validate, deleteTask);
 
 router.route('/:id/comments')
-  .post(addTaskComment)
-  .get(getTaskComments);
+  .post(mongoIdParam('id'), commentRules, validate, addTaskComment)
+  .get(mongoIdParam('id'), validate, getTaskComments);
 
 export default router;

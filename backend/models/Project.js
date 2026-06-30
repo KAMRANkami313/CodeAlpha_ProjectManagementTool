@@ -10,6 +10,7 @@ const projectSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
+      default: '',
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
@@ -27,6 +28,8 @@ const projectSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+projectSchema.index({ members: 1 });
 
 const Project = mongoose.model('Project', projectSchema);
 export default Project;

@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const getHeaders = () => {
   const token = localStorage.getItem('token');
@@ -11,8 +11,23 @@ const getHeaders = () => {
   return headers;
 };
 
+/**
+ * When a request comes back 401 (expired/invalid token), broadcast a
+ * window event so AuthContext can log the user out and redirect to /login,
+ * instead of leaving the UI in a broken "logged in but every call fails" state.
+ */
 const handleResponse = async (response) => {
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+  }
+
   if (!response.ok) {
     throw new Error(data.message || 'Something went wrong');
   }
@@ -43,11 +58,14 @@ export const api = {
     });
     return handleResponse(response);
   },
-  delete: async (endpoint) => {
+  delete: async (endpoint, body) => {
     const response = await fetch(`${API_URL}${endpoint}`, {
       method: 'DELETE',
       headers: getHeaders(),
+      body: body ? JSON.stringify(body) : undefined,
     });
     return handleResponse(response);
   },
 };
+
+export { API_URL };

@@ -9,21 +9,23 @@ import {
   removeProjectMember,
 } from '../controllers/projectController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { validate } from '../middleware/validate.js';
+import { projectRules, addMemberRules, mongoIdParam } from '../validators/rules.js';
 
 const router = express.Router();
 
 router.use(protect);
 
 router.route('/')
-  .post(createProject)
+  .post(projectRules, validate, createProject)
   .get(getProjects);
 
 router.route('/:id')
-  .get(getProjectById)
-  .put(updateProject)
-  .delete(deleteProject);
+  .get(mongoIdParam('id'), validate, getProjectById)
+  .put(mongoIdParam('id'), projectRules, validate, updateProject)
+  .delete(mongoIdParam('id'), validate, deleteProject);
 
-router.post('/:id/members', addProjectMember);
-router.delete('/:id/members', removeProjectMember);
+router.post('/:id/members', mongoIdParam('id'), addMemberRules, validate, addProjectMember);
+router.delete('/:id/members', mongoIdParam('id'), validate, removeProjectMember);
 
 export default router;
