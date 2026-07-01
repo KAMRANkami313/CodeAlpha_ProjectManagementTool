@@ -152,6 +152,11 @@ export const api = {
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
     }),
+  patch: (endpoint, body) =>
+    request(endpoint, {
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   delete: (endpoint, body) =>
     request(endpoint, {
       method: 'DELETE',

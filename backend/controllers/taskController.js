@@ -7,6 +7,18 @@ import { notifyUser } from '../services/notificationService.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import AppError from '../utils/AppError.js';
 import withTransaction from '../utils/withTransaction.js';
+import {
+  createTask as createTaskService,
+  updateTask as updateTaskService,
+  archiveTask as archiveTaskService,
+  unarchiveTask as unarchiveTaskService,
+  reorderTask as reorderTaskService,
+  addSubtask as addSubtaskService,
+  toggleSubtask as toggleSubtaskService,
+  updateSubtask as updateSubtaskService,
+  deleteSubtask as deleteSubtaskService,
+  deleteTask as deleteTaskService,
+} from '../services/taskService.js';
 
 const ensureProjectMember = (project, userId) => {
   if (!project) {
@@ -17,57 +29,35 @@ const ensureProjectMember = (project, userId) => {
   }
 };
 
+const loadTaskWithProject = async (taskId) => {
+  const task = await Task.findById(taskId).populate('project', 'members name _id');
+  if (!task) throw new AppError('Task not found', 404);
+  return task;
+};
+
 const createTask = asyncHandler(async (req, res) => {
-  const { title, description, status, priority, project, assignedTo, dueDate } = req.body;
+  const { project: projectId, ...rest } = req.body;
+  const project = await Project.findById(projectId);
+  if (!project) throw new AppError('Project not found', 404);
 
-  const parentProject = await Project.findById(project);
-
-  if (!parentProject) {
-    throw new AppError('Project not found', 404);
-  }
-
-  if (!containsId(parentProject.members, req.user._id)) {
-    throw new AppError('Access denied to this project', 403);
-  }
-
-  if (assignedTo && !containsId(parentProject.members, assignedTo)) {
-    throw new AppError('Cannot assign task to a non-member of this project', 400);
-  }
-
-  const task = await Task.create({
-    title,
-    description,
-    status,
-    priority,
+  const created = await createTaskService({
     project,
-    assignedTo: assignedTo || null,
-    dueDate: dueDate || null,
-    createdBy: req.user._id,
+    body: { ...rest, project: projectId },
+    actor: req.user,
   });
 
-  const populatedTask = await task.populate('assignedTo', 'name email');
-
-  broadcastToProject(project, 'task:created', populatedTask);
-
-  if (assignedTo) {
-    await notifyUser({
-      recipient: assignedTo,
-      sender: req.user._id,
-      type: 'TASK_ASSIGNED',
-      message: `${req.user.name} assigned you the task "${task.title}"`,
-      project,
-      task: task._id,
-    });
-  }
-
-  res.status(201).json(populatedTask);
+  res.status(201).json(created);
 });
 
 const getProjectTasks = asyncHandler(async (req, res) => {
   const parentProject = await Project.findById(req.params.projectId);
   ensureProjectMember(parentProject, req.user._id);
 
-  const tasks = await Task.find({ project: req.params.projectId })
+  const includeArchived = req.query.includeArchived === 'true';
+  const filter = { project: req.params.projectId };
+  if (!includeArchived) filter.isArchived = { $ne: true };
+
+  const tasks = await Task.find(filter)
     .populate('assignedTo', 'name email')
     .populate('createdBy', 'name email')
     .sort({ position: 1, createdAt: 1 });
@@ -93,84 +83,89 @@ const getTaskById = asyncHandler(async (req, res) => {
 });
 
 const updateTask = asyncHandler(async (req, res) => {
-  const { title, description, status, priority, assignedTo, dueDate } = req.body;
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await updateTaskService({
+    task,
+    project: task.project,
+    body: req.body,
+    actor: req.user,
+  });
+  res.json(updated);
+});
 
-  const task = await Task.findById(req.params.id).populate('project', 'members name');
+const reorderTask = asyncHandler(async (req, res) => {
+  const { status, position } = req.body;
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await reorderTaskService({
+    task,
+    project: task.project,
+    newStatus: status,
+    newPosition: position,
+    actor: req.user,
+  });
+  res.json(updated);
+});
 
-  if (!task) {
-    throw new AppError('Task not found', 404);
-  }
+const archiveTask = asyncHandler(async (req, res) => {
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await archiveTaskService({ task, project: task.project, actor: req.user });
+  res.json(updated);
+});
 
-  if (!containsId(task.project.members, req.user._id)) {
-    throw new AppError('Access denied to modify this task', 403);
-  }
-
-  if (assignedTo !== undefined && assignedTo !== null && !containsId(task.project.members, assignedTo)) {
-    throw new AppError('Cannot assign task to a non-member of this project', 400);
-  }
-
-  const previousStatus = task.status;
-  const previousAssignee = task.assignedTo ? task.assignedTo.toString() : null;
-
-  task.title = title !== undefined ? title : task.title;
-  task.description = description !== undefined ? description : task.description;
-  task.status = status || task.status;
-  task.priority = priority || task.priority;
-  task.assignedTo = assignedTo !== undefined ? assignedTo : task.assignedTo;
-  task.dueDate = dueDate !== undefined ? dueDate : task.dueDate;
-
-  await task.save();
-  const updatedTask = await task.populate('assignedTo', 'name email');
-
-  broadcastToProject(task.project._id, 'task:updated', updatedTask);
-
-  if (assignedTo && assignedTo !== previousAssignee) {
-    await notifyUser({
-      recipient: assignedTo,
-      sender: req.user._id,
-      type: 'TASK_ASSIGNED',
-      message: `${req.user.name} assigned you the task "${task.title}"`,
-      project: task.project._id,
-      task: task._id,
-    });
-  }
-
-  if (status && status !== previousStatus && task.assignedTo) {
-    await notifyUser({
-      recipient: task.assignedTo,
-      sender: req.user._id,
-      type: 'TASK_STATUS_CHANGED',
-      message: `${req.user.name} moved "${task.title}" to ${status}`,
-      project: task.project._id,
-      task: task._id,
-    });
-  }
-
-  res.json(updatedTask);
+const unarchiveTask = asyncHandler(async (req, res) => {
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await unarchiveTaskService({ task, project: task.project, actor: req.user });
+  res.json(updated);
 });
 
 const deleteTask = asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id).populate('project', 'members');
-
-  if (!task) {
-    throw new AppError('Task not found', 404);
-  }
-
-  if (!containsId(task.project.members, req.user._id)) {
-    throw new AppError('Access denied to delete this task', 403);
-  }
-
-  const projectId = task.project._id;
-  const taskId = task._id;
-
-  await withTransaction(async (session) => {
-    await Comment.deleteMany({ task: taskId }, { session });
-    await Task.deleteOne({ _id: taskId }, { session });
-  });
-
-  broadcastToProject(projectId, 'task:deleted', { taskId, projectId });
-
+  const task = await loadTaskWithProject(req.params.id);
+  await deleteTaskService({ task, project: task.project, actor: req.user });
   res.json({ message: 'Task and comments removed' });
+});
+
+const addSubtask = asyncHandler(async (req, res) => {
+  const { title } = req.body;
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await addSubtaskService({ task, project: task.project, title, actor: req.user });
+  res.status(201).json(updated);
+});
+
+const toggleSubtask = asyncHandler(async (req, res) => {
+  const { done } = req.body;
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await toggleSubtaskService({
+    task,
+    project: task.project,
+    subtaskId: req.params.subtaskId,
+    done,
+    actor: req.user,
+  });
+  res.json(updated);
+});
+
+const updateSubtask = asyncHandler(async (req, res) => {
+  const { title } = req.body;
+  const task = await loadTaskWithProject(req.params.id);
+  const updated = await updateSubtaskService({
+    task,
+    project: task.project,
+    subtaskId: req.params.subtaskId,
+    title,
+    actor: req.user,
+  });
+  res.json(updated);
+});
+
+const deleteSubtask = asyncHandler(async (req, res) => {
+  const task = await loadTaskWithProject(req.params.id);
+  await deleteSubtaskService({
+    task,
+    project: task.project,
+    subtaskId: req.params.subtaskId,
+    actor: req.user,
+  });
+  res.json({ message: 'Subtask removed' });
 });
 
 const addTaskComment = asyncHandler(async (req, res) => {
@@ -243,7 +238,14 @@ export {
   getProjectTasks,
   getTaskById,
   updateTask,
+  reorderTask,
+  archiveTask,
+  unarchiveTask,
   deleteTask,
+  addSubtask,
+  toggleSubtask,
+  updateSubtask,
+  deleteSubtask,
   addTaskComment,
   getTaskComments,
 };

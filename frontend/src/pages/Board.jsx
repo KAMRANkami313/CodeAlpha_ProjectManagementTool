@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Archive } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import useProjectRoom from '../hooks/useProjectRoom';
@@ -29,6 +29,7 @@ const Board = () => {
   const [editingTask, setEditingTask] = useState(undefined);
   const [createStatus, setCreateStatus] = useState('Todo');
   const [showMembers, setShowMembers] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -38,7 +39,7 @@ const Board = () => {
       try {
         const [projectData, tasksData] = await Promise.all([
           api.get(`/projects/${projectId}`),
-          api.get(`/tasks/project/${projectId}`),
+          api.get(`/tasks/project/${projectId}?includeArchived=${showArchived}`),
         ]);
         if (active) {
           setProject(projectData);
@@ -54,19 +55,33 @@ const Board = () => {
     return () => {
       active = false;
     };
-  }, [projectId]);
+  }, [projectId, showArchived]);
 
   useEffect(() => {
     if (!socket) return;
 
     const onCreated = (task) => {
+      if (task.isArchived && !showArchived) return;
       setTasks((prev) => (prev.some((t) => t._id === task._id) ? prev : [...prev, task]));
     };
     const onUpdated = (task) => {
-      setTasks((prev) => prev.map((t) => (t._id === task._id ? task : t)));
+      setTasks((prev) => {
+        if (task.isArchived && !showArchived) {
+          return prev.filter((t) => t._id !== task._id);
+        }
+        const exists = prev.some((t) => t._id === task._id);
+        return exists ? prev.map((t) => (t._id === task._id ? task : t)) : [...prev, task];
+      });
     };
     const onDeleted = ({ taskId }) => {
       setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    };
+    const onReordered = ({ status, tasks: reorderedTasks }) => {
+      setTasks((prev) => {
+        const reorderedIds = new Set(reorderedTasks.map((t) => t._id));
+        const others = prev.filter((t) => !reorderedIds.has(t._id));
+        return [...others, ...reorderedTasks];
+      });
     };
     const onMemberAdded = ({ member }) => {
       setProject((prev) =>
@@ -82,6 +97,7 @@ const Board = () => {
     socket.on('task:created', onCreated);
     socket.on('task:updated', onUpdated);
     socket.on('task:deleted', onDeleted);
+    socket.on('tasks:reordered', onReordered);
     socket.on('project:memberAdded', onMemberAdded);
     socket.on('project:memberRemoved', onMemberRemoved);
 
@@ -89,16 +105,21 @@ const Board = () => {
       socket.off('task:created', onCreated);
       socket.off('task:updated', onUpdated);
       socket.off('task:deleted', onDeleted);
+      socket.off('tasks:reordered', onReordered);
       socket.off('project:memberAdded', onMemberAdded);
       socket.off('project:memberRemoved', onMemberRemoved);
     };
-  }, [socket]);
+  }, [socket, showArchived]);
 
   const handleTaskSaved = (savedTask) => {
     setTasks((prev) => {
+      if (savedTask.isArchived && !showArchived) {
+        return prev.filter((t) => t._id !== savedTask._id);
+      }
       const exists = prev.some((t) => t._id === savedTask._id);
       return exists ? prev.map((t) => (t._id === savedTask._id ? savedTask : t)) : [...prev, savedTask];
     });
+    if (activeTask?._id === savedTask._id) setActiveTask(savedTask);
     setEditingTask(undefined);
   };
 
@@ -113,20 +134,39 @@ const Board = () => {
   };
 
   const handleDrop = useCallback(
-    async (taskId, newStatus) => {
+    async (taskId, newStatus, dropIndex) => {
       const task = tasks.find((t) => t._id === taskId);
-      if (!task || task.status === newStatus) {
-        return;
-      }
-      setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)));
+      if (!task) return;
+
+      const sameStatus = task.status === newStatus;
+      if (sameStatus && typeof dropIndex !== 'number') return;
+
+      const columnTasks = tasks
+        .filter((t) => t.status === newStatus && t._id !== taskId)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const clampedIndex = Math.max(0, Math.min(dropIndex ?? columnTasks.length, columnTasks.length));
+      columnTasks.splice(clampedIndex, 0, { ...task, status: newStatus });
+
+      setTasks((prev) => {
+        const otherStatusTasks = prev.filter((t) => t.status !== newStatus && t._id !== taskId);
+        const reorderedColumn = columnTasks.map((t, idx) => ({ ...t, position: idx }));
+        return [...otherStatusTasks, ...reorderedColumn];
+      });
+
       try {
-        await api.put(`/tasks/${taskId}`, { status: newStatus });
+        await api.put(`/tasks/${taskId}/reorder`, {
+          status: newStatus,
+          position: clampedIndex,
+        });
       } catch (err) {
         setError(err.message || 'Failed to move task');
-        setTasks((prev) => prev.map((t) => (t._id === taskId ? task : t)));
+        try {
+          const fresh = await api.get(`/tasks/project/${projectId}?includeArchived=${showArchived}`);
+          setTasks(fresh);
+        } catch {}
       }
     },
-    [tasks]
+    [tasks, projectId, showArchived]
   );
 
   if (loading) {
@@ -157,6 +197,14 @@ const Board = () => {
         </div>
 
         <div className="board-header-right">
+          <button
+            className={`btn-secondary ${showArchived ? 'btn-secondary-active' : ''}`}
+            onClick={() => setShowArchived((v) => !v)}
+            title={showArchived ? 'Hide archived tasks' : 'Show archived tasks'}
+          >
+            <Archive size={16} />
+            <span>{showArchived ? 'Hide Archived' : 'Archived'}</span>
+          </button>
           <button className="btn-secondary" onClick={() => setShowMembers(true)}>
             <Users size={16} />
             <span>{project.members.length} Members</span>
@@ -172,10 +220,12 @@ const Board = () => {
           <TaskColumn
             key={status}
             status={status}
-            tasks={tasks.filter((t) => t.status === status)}
+            tasks={tasks
+              .filter((t) => t.status === status)
+              .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))}
             onTaskClick={(task) => setActiveTask(task)}
-            onAddClick={(status) => {
-              setCreateStatus(status);
+            onAddClick={(s) => {
+              setCreateStatus(s);
               setEditingTask(null);
             }}
             onDrop={handleDrop}
@@ -217,6 +267,7 @@ const Board = () => {
             setEditingTask(activeTask);
             setActiveTask(null);
           }}
+          onTaskUpdated={(updated) => setActiveTask(updated)}
         />
       )}
 
