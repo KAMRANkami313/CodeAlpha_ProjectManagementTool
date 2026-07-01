@@ -19,6 +19,12 @@ import {
   deleteSubtask as deleteSubtaskService,
   deleteTask as deleteTaskService,
 } from '../services/taskService.js';
+import {
+  buildFilter,
+  buildSort,
+  applyPrioritySort,
+  buildMeta,
+} from '../services/taskQueryService.js';
 
 const ensureProjectMember = (project, userId) => {
   if (!project) {
@@ -53,16 +59,27 @@ const getProjectTasks = asyncHandler(async (req, res) => {
   const parentProject = await Project.findById(req.params.projectId);
   ensureProjectMember(parentProject, req.user._id);
 
-  const includeArchived = req.query.includeArchived === 'true';
-  const filter = { project: req.params.projectId };
-  if (!includeArchived) filter.isArchived = { $ne: true };
+  const filter = buildFilter(req.query, req.params.projectId);
+  const sort = buildSort(req.query);
+  const sortByPriority = (req.query.sortBy || '').trim() === 'priority';
 
-  const tasks = await Task.find(filter)
+  let tasks = await Task.find(filter)
     .populate('assignedTo', 'name email')
     .populate('createdBy', 'name email')
-    .sort({ position: 1, createdAt: 1 });
+    .sort(sort);
 
-  res.json(tasks);
+  if (sortByPriority) {
+    const direction = req.query.sortDir === 'desc' ? -1 : 1;
+    tasks = applyPrioritySort(tasks, direction);
+  }
+
+  const hasFilters = Object.keys(req.query).length > 0;
+  if (hasFilters) {
+    const meta = buildMeta(req.query, tasks);
+    res.json({ data: tasks, meta });
+  } else {
+    res.json(tasks);
+  }
 });
 
 const getTaskById = asyncHandler(async (req, res) => {

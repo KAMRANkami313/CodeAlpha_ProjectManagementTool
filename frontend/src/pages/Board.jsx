@@ -1,9 +1,10 @@
-import { useState, useEffect, useContext, useCallback } from 'react';
+import { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Users, Archive } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import useProjectRoom from '../hooks/useProjectRoom';
+import useDebounce from '../hooks/useDebounce';
 import { api } from '../services/api';
 import TaskColumn from '../components/TaskColumn';
 import TaskModal from '../components/TaskModal';
@@ -11,8 +12,39 @@ import TaskCommentsModal from '../components/TaskCommentsModal';
 import MembersModal from '../components/MembersModal';
 import NotificationBell from '../components/NotificationBell';
 import ReconnectionBanner from '../components/ReconnectionBanner';
+import TaskFilterBar from '../components/TaskFilterBar';
 
 const STATUSES = ['Todo', 'In Progress', 'In Review', 'Done'];
+
+const DEFAULT_FILTERS = {
+  search: '',
+  status: [],
+  priority: [],
+  assignedTo: [],
+  label: [],
+  overdue: false,
+  unassigned: false,
+  noDueDate: false,
+  includeArchived: false,
+  sortBy: 'position',
+  sortDir: 'asc',
+};
+
+const buildQueryString = (filters) => {
+  const params = new URLSearchParams();
+  if (filters.search.trim()) params.set('search', filters.search.trim());
+  if (filters.status.length > 0) params.set('status', filters.status.join(','));
+  if (filters.priority.length > 0) params.set('priority', filters.priority.join(','));
+  if (filters.assignedTo.length > 0) params.set('assignedTo', filters.assignedTo.join(','));
+  if (filters.label.length > 0) params.set('label', filters.label.join(','));
+  if (filters.overdue) params.set('overdue', 'true');
+  if (filters.unassigned) params.set('unassigned', 'true');
+  if (filters.noDueDate) params.set('noDueDate', 'true');
+  if (filters.includeArchived) params.set('includeArchived', 'true');
+  if (filters.sortBy && filters.sortBy !== 'position') params.set('sortBy', filters.sortBy);
+  if (filters.sortDir === 'desc') params.set('sortDir', 'desc');
+  return params.toString();
+};
 
 const Board = () => {
   const { projectId } = useParams();
@@ -31,6 +63,33 @@ const Board = () => {
   const [showMembers, setShowMembers] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const debouncedSearch = useDebounce(filters.search, 300);
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, search: debouncedSearch }),
+    [filters, debouncedSearch]
+  );
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      effectiveFilters.search.trim() !== '' ||
+      effectiveFilters.status.length > 0 ||
+      effectiveFilters.priority.length > 0 ||
+      effectiveFilters.assignedTo.length > 0 ||
+      effectiveFilters.label.length > 0 ||
+      effectiveFilters.overdue ||
+      effectiveFilters.unassigned ||
+      effectiveFilters.noDueDate ||
+      effectiveFilters.includeArchived ||
+      effectiveFilters.sortBy !== 'position' ||
+      effectiveFilters.sortDir !== 'asc'
+    );
+  }, [effectiveFilters]);
+
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, includeArchived: showArchived }));
+  }, [showArchived]);
+
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -39,11 +98,12 @@ const Board = () => {
       try {
         const [projectData, tasksData] = await Promise.all([
           api.get(`/projects/${projectId}`),
-          api.get(`/tasks/project/${projectId}?includeArchived=${showArchived}`),
+          api.get(`/tasks/project/${projectId}?${buildQueryString(effectiveFilters)}`),
         ]);
         if (active) {
           setProject(projectData);
-          setTasks(tasksData);
+          const list = Array.isArray(tasksData) ? tasksData : tasksData.data || [];
+          setTasks(list);
         }
       } catch (err) {
         if (active) setError(err.message || 'Failed to load project');
@@ -55,18 +115,18 @@ const Board = () => {
     return () => {
       active = false;
     };
-  }, [projectId, showArchived]);
+  }, [projectId, effectiveFilters]);
 
   useEffect(() => {
     if (!socket) return;
 
     const onCreated = (task) => {
-      if (task.isArchived && !showArchived) return;
+      if (task.isArchived && !effectiveFilters.includeArchived) return;
       setTasks((prev) => (prev.some((t) => t._id === task._id) ? prev : [...prev, task]));
     };
     const onUpdated = (task) => {
       setTasks((prev) => {
-        if (task.isArchived && !showArchived) {
+        if (task.isArchived && !effectiveFilters.includeArchived) {
           return prev.filter((t) => t._id !== task._id);
         }
         const exists = prev.some((t) => t._id === task._id);
@@ -77,6 +137,7 @@ const Board = () => {
       setTasks((prev) => prev.filter((t) => t._id !== taskId));
     };
     const onReordered = ({ status, tasks: reorderedTasks }) => {
+      if (effectiveFilters.sortBy !== 'position') return;
       setTasks((prev) => {
         const reorderedIds = new Set(reorderedTasks.map((t) => t._id));
         const others = prev.filter((t) => !reorderedIds.has(t._id));
@@ -109,11 +170,11 @@ const Board = () => {
       socket.off('project:memberAdded', onMemberAdded);
       socket.off('project:memberRemoved', onMemberRemoved);
     };
-  }, [socket, showArchived]);
+  }, [socket, effectiveFilters.includeArchived, effectiveFilters.sortBy]);
 
   const handleTaskSaved = (savedTask) => {
     setTasks((prev) => {
-      if (savedTask.isArchived && !showArchived) {
+      if (savedTask.isArchived && !effectiveFilters.includeArchived) {
         return prev.filter((t) => t._id !== savedTask._id);
       }
       const exists = prev.some((t) => t._id === savedTask._id);
@@ -135,6 +196,12 @@ const Board = () => {
 
   const handleDrop = useCallback(
     async (taskId, newStatus, dropIndex) => {
+      if (hasActiveFilters) {
+        setError('Cannot reorder while filters are active. Clear filters to reorder.');
+        setTimeout(() => setError(''), 3000);
+        return;
+      }
+
       const task = tasks.find((t) => t._id === taskId);
       if (!task) return;
 
@@ -161,13 +228,17 @@ const Board = () => {
       } catch (err) {
         setError(err.message || 'Failed to move task');
         try {
-          const fresh = await api.get(`/tasks/project/${projectId}?includeArchived=${showArchived}`);
-          setTasks(fresh);
+          const fresh = await api.get(`/tasks/project/${projectId}?${buildQueryString(effectiveFilters)}`);
+          setTasks(Array.isArray(fresh) ? fresh : fresh.data || []);
         } catch {}
       }
     },
-    [tasks, projectId, showArchived]
+    [tasks, projectId, effectiveFilters, hasActiveFilters]
   );
+
+  const handleResetFilters = () => {
+    setFilters({ ...DEFAULT_FILTERS, includeArchived: showArchived });
+  };
 
   if (loading) {
     return <div className="state-message">Loading board...</div>;
@@ -213,7 +284,21 @@ const Board = () => {
         </div>
       </header>
 
+      <TaskFilterBar
+        filters={filters}
+        onChange={setFilters}
+        onReset={handleResetFilters}
+        members={project.members}
+        resultCount={tasks.length}
+      />
+
       {error && <div className="auth-error board-error-block">{error}</div>}
+
+      {hasActiveFilters && (
+        <div className="task-filter-active-notice">
+          Filters are active — drag-drop reordering is disabled. <button onClick={handleResetFilters}>Clear filters</button>
+        </div>
+      )}
 
       <div className="board-columns">
         {STATUSES.map((status) => (

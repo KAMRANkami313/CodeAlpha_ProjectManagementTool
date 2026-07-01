@@ -20,6 +20,7 @@ import { validate } from '../middleware/validate.js';
 import {
   taskRules,
   taskUpdateRules,
+  taskQueryRules,
   reorderRules,
   subtaskCreateRules,
   subtaskToggleRules,
@@ -36,7 +37,7 @@ router.route('/')
   .post(taskRules, validate, createTask);
 
 router.route('/project/:projectId')
-  .get(mongoIdParam('projectId'), validate, getProjectTasks);
+  .get(mongoIdParam('projectId'), taskQueryRules, validate, getProjectTasks);
 
 router.route('/:id')
   .get(mongoIdParam('id'), validate, getTaskById)

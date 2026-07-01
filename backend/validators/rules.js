@@ -1,6 +1,49 @@
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
 const LABEL_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+const VALID_SORT_FIELDS = ['position', 'createdAt', 'updatedAt', 'dueDate', 'priority', 'title'];
+const VALID_STATUSES = ['Todo', 'In Progress', 'In Review', 'Done'];
+const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
+
+const splitCsv = (value) => {
+  if (!value) return [];
+  return String(value).split(',').map((v) => v.trim()).filter(Boolean);
+};
+
+const taskQueryRules = [
+  query('status').optional().custom((value) => {
+    const items = splitCsv(value);
+    const invalid = items.filter((s) => !VALID_STATUSES.includes(s));
+    if (invalid.length > 0) throw new Error(`Invalid status value(s): ${invalid.join(', ')}`);
+    return true;
+  }),
+  query('priority').optional().custom((value) => {
+    const items = splitCsv(value);
+    const invalid = items.filter((p) => !VALID_PRIORITIES.includes(p));
+    if (invalid.length > 0) throw new Error(`Invalid priority value(s): ${invalid.join(', ')}`);
+    return true;
+  }),
+  query('assignedTo').optional().custom((value) => {
+    const items = splitCsv(value);
+    const invalid = items.filter((v) => !/^[0-9a-fA-F]{24}$/.test(v));
+    if (invalid.length > 0) throw new Error('assignedTo must be valid MongoDB ObjectId(s)');
+    return true;
+  }),
+  query('label').optional().isString(),
+  query('search').optional().isString().isLength({ max: 200 }),
+  query('dueBefore').optional().isISO8601(),
+  query('dueAfter').optional().isISO8601(),
+  query('sortBy')
+    .optional()
+    .isIn(VALID_SORT_FIELDS)
+    .withMessage(`sortBy must be one of: ${VALID_SORT_FIELDS.join(', ')}`),
+  query('sortDir').optional().isIn(['asc', 'desc']),
+  query('includeArchived').optional().isBoolean(),
+  query('overdue').optional().isBoolean(),
+  query('unassigned').optional().isBoolean(),
+  query('noDueDate').optional().isBoolean(),
+];
 
 const registerRules = [
   body('name').trim().notEmpty().withMessage('Name is required'),
@@ -129,6 +172,7 @@ export {
   addMemberRules,
   taskRules,
   taskUpdateRules,
+  taskQueryRules,
   reorderRules,
   subtaskCreateRules,
   subtaskToggleRules,
