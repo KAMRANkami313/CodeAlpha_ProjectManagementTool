@@ -1,88 +1,113 @@
 import express from 'express';
 import http from 'http';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import mongoose from 'mongoose';
+
+import env from './config/env.js';
 import connectDB from './config/db.js';
+import logger from './utils/logger.js';
+
+import requestId from './middleware/requestId.js';
+import httpLogger from './middleware/httpLogger.js';
+import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+
 import userRoutes from './routes/userRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+
 import { initSocket } from './socket/socketManager.js';
-import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
-dotenv.config();
-
+// Boot
 connectDB();
 
 const app = express();
 const server = http.createServer(app);
 
+// Realtime layer
 initSocket(server);
 
+// --- Security & transport middleware ---
 app.use(helmet());
 app.use(compression());
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: env.clientUrl,
     credentials: true,
   })
 );
 
+// --- Tracing & request logging ---
+// Order matters: requestId must run BEFORE httpLogger so each log line carries the id.
+app.use(requestId);
+app.use(httpLogger);
+
+// --- Body parsing ---
+app.use(express.json({ limit: env.bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: env.bodyLimit }));
+
+// --- Rate limiting ---
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
+  windowMs: env.rateLimitWindowMs,
+  limit: env.rateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
+  // Prefer per-user limiting when authenticated; fall back to IPv6-safe IP key.
+  keyGenerator: (req) => req.user?._id?.toString() || ipKeyGenerator(req),
 });
 app.use('/api', apiLimiter);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
-
+// --- Health check (excluded from auto-logging by httpLogger config) ---
 app.get('/health', (req, res) => {
+  const readyStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const mongoState = readyStates[mongoose?.connection?.readyState] ?? 'unknown';
   res.status(200).json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    environment: env.nodeEnv,
+    requestId: req.id,
+    services: {
+      mongo: mongoState === 'connected' ? 'ok' : mongoState,
+    },
   });
 });
 
+// --- API routes ---
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/', (req, res) => {
-  res.send('API is running...');
+  res.json({ name: 'CollabTask API', status: 'running', docs: '/health' });
 });
 
+// --- 404 + error handler (must be last) ---
 app.use(notFound);
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+// --- Start server ---
+server.listen(env.port, () => {
+  logger.info(
+    { port: env.port, env: env.nodeEnv },
+    `CollabTask API listening on port ${env.port}`
+  );
 });
 
+// --- Graceful shutdown ---
 const gracefulShutdown = (signal) => {
-  console.log(`${signal} received. Shutting down gracefully...`);
+  logger.info({ signal }, 'Shutting down gracefully...');
   server.close(() => {
-    console.log('HTTP server closed.');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
 
   setTimeout(() => {
-    console.error('Forced shutdown after timeout.');
+    logger.error('Forced shutdown after 10s timeout');
     process.exit(1);
   }, 10000);
 };
@@ -90,9 +115,9 @@ const gracefulShutdown = (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
+  logger.error({ reason }, 'Unhandled promise rejection');
 });
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.fatal({ err }, 'Uncaught exception — shutting down');
   gracefulShutdown('uncaughtException');
 });

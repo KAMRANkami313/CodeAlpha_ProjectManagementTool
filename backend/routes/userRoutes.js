@@ -4,12 +4,13 @@ import { registerUser, authUser, getUserProfile, searchUsersByEmail } from '../c
 import { protect } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
 import { registerRules, loginRules } from '../validators/rules.js';
+import env from '../config/env.js';
 
 const router = express.Router();
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
+  windowMs: env.rateLimitWindowMs,
+  limit: env.authRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many login attempts. Please try again later.' },
@@ -17,7 +18,7 @@ const authLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 5,
+  limit: env.registerRateLimitMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many registration attempts. Please try again later.' },
