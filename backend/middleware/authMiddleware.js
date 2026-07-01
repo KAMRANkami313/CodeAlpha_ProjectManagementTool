@@ -1,27 +1,43 @@
-import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { verifyAccessToken } from '../utils/generateToken.js';
+import AppError from '../utils/AppError.js';
+import asyncHandler from '../utils/asyncHandler.js';
 
-const protect = async (req, res, next) => {
+const protect = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Not authorized, no token' });
+    throw new AppError('Not authorized, no token', 401);
   }
 
+  const token = authHeader.split(' ')[1];
+
+  let decoded;
   try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-
-    if (!user) {
-      return res.status(401).json({ message: 'Not authorized, user no longer exists' });
+    decoded = verifyAccessToken(token);
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      throw new AppError('Access token expired', 401);
     }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Not authorized, token failed' });
+    throw new AppError('Not authorized, token failed', 401);
   }
-};
+
+  if (decoded.type !== 'access') {
+    throw new AppError('Invalid token type', 401);
+  }
+
+  const user = await User.findById(decoded.userId);
+
+  if (!user) {
+    throw new AppError('Not authorized, user no longer exists', 401);
+  }
+
+  if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+    throw new AppError('Session invalidated, please log in again', 401);
+  }
+
+  req.user = user;
+  next();
+});
 
 export { protect };

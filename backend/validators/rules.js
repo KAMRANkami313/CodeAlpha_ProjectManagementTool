@@ -3,12 +3,28 @@ import { body, param } from 'express-validator';
 const registerRules = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('A valid email is required').normalizeEmail(),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
 ];
 
 const loginRules = [
   body('email').isEmail().withMessage('A valid email is required').normalizeEmail(),
   body('password').notEmpty().withMessage('Password is required'),
+];
+
+const refreshTokenRules = [
+  body('refreshToken')
+    .isString()
+    .notEmpty()
+    .withMessage('Refresh token is required'),
+];
+
+const logoutRules = [
+  body('refreshToken')
+    .optional()
+    .isString()
+    .withMessage('Refresh token must be a string'),
 ];
 
 const projectRules = [
@@ -42,6 +58,8 @@ const mongoIdParam = (field) => [param(field).isMongoId().withMessage('Invalid i
 export {
   registerRules,
   loginRules,
+  refreshTokenRules,
+  logoutRules,
   projectRules,
   addMemberRules,
   taskRules,

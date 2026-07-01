@@ -1,7 +1,8 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { UserPlus, User, Mail, Lock } from 'lucide-react';
+import PasswordStrengthMeter from '../components/PasswordStrengthMeter';
 
 const Signup = () => {
   const [name, setName] = useState('');
@@ -12,6 +13,8 @@ const Signup = () => {
 
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  const passwordValue = useMemo(() => password, [password]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -48,6 +51,7 @@ const Signup = () => {
                 id="name"
                 type="text"
                 required
+                minLength={2}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -76,10 +80,13 @@ const Signup = () => {
                 id="password"
                 type="password"
                 required
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
               />
             </div>
+            <PasswordStrengthMeter password={passwordValue} />
           </div>
 
           <button className="auth-btn" type="submit" disabled={loading}>

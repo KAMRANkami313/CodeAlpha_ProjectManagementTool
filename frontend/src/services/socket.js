@@ -4,7 +4,7 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 let socket = null;
 
-const getSocket = (token) => {
+const getSocket = (tokenGetter) => {
   if (socket) {
     if (socket.connected) return socket;
     socket.connect();
@@ -13,7 +13,7 @@ const getSocket = (token) => {
 
   socket = io(SOCKET_URL, {
     autoConnect: false,
-    auth: { token },
+    auth: (cb) => cb({ token: tokenGetter() }),
     withCredentials: true,
   });
 

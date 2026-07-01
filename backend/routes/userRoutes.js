@@ -1,9 +1,22 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { registerUser, authUser, getUserProfile, searchUsersByEmail } from '../controllers/userController.js';
+import {
+  registerUser,
+  authUser,
+  refreshAccessToken,
+  logout,
+  logoutAll,
+  getUserProfile,
+  searchUsersByEmail,
+} from '../controllers/userController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validate.js';
-import { registerRules, loginRules } from '../validators/rules.js';
+import {
+  registerRules,
+  loginRules,
+  refreshTokenRules,
+  logoutRules,
+} from '../validators/rules.js';
 import env from '../config/env.js';
 
 const router = express.Router();
@@ -24,8 +37,19 @@ const registerLimiter = rateLimit({
   message: { message: 'Too many registration attempts. Please try again later.' },
 });
 
+const refreshLimiter = rateLimit({
+  windowMs: env.rateLimitWindowMs,
+  limit: env.authRateLimitMax * 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many refresh attempts. Please log in again.' },
+});
+
 router.post('/', registerLimiter, registerRules, validate, registerUser);
 router.post('/login', authLimiter, loginRules, validate, authUser);
+router.post('/refresh', refreshLimiter, refreshTokenRules, validate, refreshAccessToken);
+router.post('/logout', protect, logoutRules, validate, logout);
+router.post('/logout-all', protect, logoutAll);
 router.get('/profile', protect, getUserProfile);
 router.get('/search', protect, searchUsersByEmail);
 

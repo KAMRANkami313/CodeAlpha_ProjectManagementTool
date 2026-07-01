@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContext';
 import { getSocket, disconnectSocket } from '../services/socket';
+import { TOKEN_STORAGE_KEYS } from '../services/api';
 
 export const SocketContext = createContext(null);
 
@@ -17,8 +18,8 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    const instance = getSocket(token);
+    const tokenGetter = () => localStorage.getItem(TOKEN_STORAGE_KEYS.access);
+    const instance = getSocket(tokenGetter);
     setSocket(instance);
     setIsConnected(instance.connected);
 

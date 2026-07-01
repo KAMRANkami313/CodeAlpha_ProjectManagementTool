@@ -117,3 +117,58 @@
 .auth-link:hover {
   text-decoration: underline;
 }
+
+.password-strength-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.password-strength-bar {
+  flex: 1;
+  height: 6px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-full, 999px);
+  overflow: hidden;
+}
+
+.password-strength-fill {
+  height: 100%;
+  transition:
+    width 0.25s ease,
+    background-color 0.25s ease;
+  border-radius: inherit;
+}
+
+.password-strength-fill.strength-empty {
+  width: 0%;
+  background-color: transparent;
+}
+
+.password-strength-fill.strength-very-weak {
+  background-color: #ef4444;
+}
+
+.password-strength-fill.strength-weak {
+  background-color: #f97316;
+}
+
+.password-strength-fill.strength-fair {
+  background-color: #eab308;
+}
+
+.password-strength-fill.strength-good {
+  background-color: #22c55e;
+}
+
+.password-strength-fill.strength-strong {
+  background-color: #16a34a;
+}
+
+.password-strength-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  min-width: 70px;
+  text-align: right;
+}
