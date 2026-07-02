@@ -11,6 +11,8 @@ import {
 } from '../services/authService.js';
 import { scorePassword } from '../utils/passwordStrength.js';
 
+const ONLINE_THRESHOLD_MS = 90 * 1000;
+
 const getClientMeta = (req) => ({
   userAgent: req.headers['user-agent'] || '',
   ip: req.ip || req.socket?.remoteAddress || '',
@@ -21,9 +23,25 @@ const buildAuthResponse = (user, tokenPair) => ({
   name: user.name,
   email: user.email,
   avatar: user.avatar,
+  bio: user.bio,
+  preferences: user.preferences?.toObject?.() || user.preferences || {},
   accessToken: tokenPair.accessToken,
   refreshToken: tokenPair.refreshToken,
   refreshExpiresAt: tokenPair.refreshExpiresAt,
+});
+
+const buildProfileResponse = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  avatar: user.avatar,
+  bio: user.bio,
+  preferences: user.preferences?.toObject?.() || user.preferences || {},
+  lastLoginAt: user.lastLoginAt,
+  lastSeenAt: user.lastSeenAt,
+  isOnline: user.isOnline,
+  tokenVersion: user.tokenVersion,
+  createdAt: user.createdAt,
 });
 
 const registerUser = asyncHandler(async (req, res) => {
@@ -42,6 +60,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const user = await User.create({ name, email, password });
     const tokenPair = await issueTokenPair(user, getClientMeta(req));
     user.lastLoginAt = new Date();
+    user.lastSeenAt = new Date();
     await user.save();
 
     logger.info({ userId: user._id }, 'User registered');
@@ -83,6 +102,7 @@ const authUser = asyncHandler(async (req, res) => {
 
   await user.resetLoginAttempts();
   user.lastLoginAt = new Date();
+  user.lastSeenAt = new Date();
   await user.save();
 
   const tokenPair = await issueTokenPair(user, getClientMeta(req));
@@ -99,6 +119,9 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     _id: result.user._id,
     name: result.user.name,
     email: result.user.email,
+    avatar: result.user.avatar,
+    bio: result.user.bio,
+    preferences: result.user.preferences?.toObject?.() || result.user.preferences || {},
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
     refreshExpiresAt: result.refreshExpiresAt,
@@ -108,6 +131,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
   await revokeRefreshToken(refreshToken);
+  if (req.user?.lastSeenAt !== undefined) {
+    req.user.lastSeenAt = new Date();
+    await req.user.save().catch(() => {});
+  }
   logger.info({ userId: req.user._id }, 'User logged out');
   res.json({ message: 'Logged out' });
 });
@@ -126,14 +153,78 @@ const getUserProfile = asyncHandler(async (req, res) => {
     throw new AppError('User not found', 404);
   }
 
-  res.json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    avatar: user.avatar,
-    lastLoginAt: user.lastLoginAt,
-    tokenVersion: user.tokenVersion,
-  });
+  res.json(buildProfileResponse(user));
+});
+
+const updateUserProfile = asyncHandler(async (req, res) => {
+  const { name, bio, avatar, preferences } = req.body;
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new AppError('Name cannot be empty', 400);
+    user.name = name.trim();
+  }
+  if (bio !== undefined) {
+    user.bio = typeof bio === 'string' ? bio.trim().slice(0, 300) : '';
+  }
+  if (avatar !== undefined) {
+    user.avatar = typeof avatar === 'string' ? avatar.trim() : '';
+  }
+  if (preferences !== undefined && typeof preferences === 'object' && preferences !== null) {
+    if (preferences.theme !== undefined) {
+      if (!['system', 'light', 'dark'].includes(preferences.theme)) {
+        throw new AppError('Invalid theme value', 400);
+      }
+      user.preferences = user.preferences || {};
+      user.preferences.theme = preferences.theme;
+    }
+    if (preferences.emailNotifications !== undefined) {
+      user.preferences.emailNotifications = Boolean(preferences.emailNotifications);
+    }
+    if (preferences.compactView !== undefined) {
+      user.preferences.compactView = Boolean(preferences.compactView);
+    }
+  }
+
+  await user.save();
+  logger.info({ userId: user._id }, 'User profile updated');
+  res.json(buildProfileResponse(user));
+});
+
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const user = await User.findById(req.user._id).select('+password');
+
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  const isMatch = await user.comparePassword(currentPassword);
+  if (!isMatch) {
+    throw new AppError('Current password is incorrect', 401);
+  }
+
+  const strength = scorePassword(newPassword);
+  if (strength.score < 2) {
+    throw new AppError(
+      `New password is too weak. ${strength.suggestions.join(' ')}`,
+      400,
+      { strength }
+    );
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  await revokeAllUserTokens(user._id);
+  await bumpTokenVersion(user._id);
+
+  logger.info({ userId: user._id }, 'User password changed');
+  res.json({ message: 'Password changed. All sessions revoked — please log in again.' });
 });
 
 const searchUsersByEmail = asyncHandler(async (req, res) => {
@@ -146,10 +237,22 @@ const searchUsersByEmail = asyncHandler(async (req, res) => {
   const users = await User.find({
     email: { $regex: query.trim(), $options: 'i' },
   })
-    .select('name email')
+    .select('name email avatar lastSeenAt')
     .limit(5);
 
-  res.json(users);
+  const now = Date.now();
+  const result = users.map((u) => {
+    const obj = u.toObject({ virtuals: true });
+    obj.isOnline = u.lastSeenAt ? now - u.lastSeenAt.getTime() < ONLINE_THRESHOLD_MS : false;
+    return obj;
+  });
+
+  res.json(result);
+});
+
+const touchPresence = asyncHandler(async (req, res) => {
+  await req.user.touchPresence();
+  res.json({ ok: true, lastSeenAt: req.user.lastSeenAt });
 });
 
 export {
@@ -159,5 +262,8 @@ export {
   logout,
   logoutAll,
   getUserProfile,
+  updateUserProfile,
+  changePassword,
   searchUsersByEmail,
+  touchPresence,
 };

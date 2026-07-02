@@ -53,6 +53,23 @@ const registerRules = [
     .withMessage('Password must be at least 8 characters'),
 ];
 
+const profileUpdateRules = [
+  body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+  body('bio').optional().isString().isLength({ max: 300 }),
+  body('avatar').optional().isString(),
+  body('preferences').optional().isObject(),
+  body('preferences.theme').optional().isIn(['system', 'light', 'dark']),
+  body('preferences.emailNotifications').optional().isBoolean(),
+  body('preferences.compactView').optional().isBoolean(),
+];
+
+const changePasswordRules = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters'),
+];
+
 const loginRules = [
   body('email').isEmail().withMessage('A valid email is required').normalizeEmail(),
   body('password').notEmpty().withMessage('Password is required'),
@@ -168,6 +185,8 @@ export {
   loginRules,
   refreshTokenRules,
   logoutRules,
+  profileUpdateRules,
+  changePasswordRules,
   projectRules,
   addMemberRules,
   taskRules,

@@ -8,6 +8,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Signup = lazy(() => import('./pages/Signup'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Board = lazy(() => import('./pages/Board'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 const ProtectedRoute = ({ children }) => {
   const { user, initializing } = useContext(AuthContext);
@@ -47,6 +48,14 @@ const App = () => {
             element={
               <ProtectedRoute>
                 <Board />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             }
           />

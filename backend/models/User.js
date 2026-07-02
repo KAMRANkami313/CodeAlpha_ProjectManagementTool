@@ -6,6 +6,25 @@ const BCRYPT_SALT_ROUNDS = 12;
 const LOCK_TIME_MS = env.accountLockMinutes * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = env.maxLoginAttempts;
 
+const preferencesSchema = new mongoose.Schema(
+  {
+    theme: {
+      type: String,
+      enum: ['system', 'light', 'dark'],
+      default: 'system',
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    compactView: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -32,6 +51,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    bio: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [300, 'Bio cannot exceed 300 characters'],
+    },
+    preferences: {
+      type: preferencesSchema,
+      default: () => ({}),
+    },
+    lastSeenAt: {
+      type: Date,
+      default: null,
+    },
     tokenVersion: {
       type: Number,
       default: 0,
@@ -57,6 +90,11 @@ const userSchema = new mongoose.Schema(
 
 userSchema.virtual('isLocked').get(function () {
   return Boolean(this.lockUntil && this.lockUntil > Date.now());
+});
+
+userSchema.virtual('isOnline').get(function () {
+  if (!this.lastSeenAt) return false;
+  return Date.now() - this.lastSeenAt.getTime() < 90 * 1000;
 });
 
 userSchema.pre('save', async function () {
@@ -91,6 +129,14 @@ userSchema.methods.resetLoginAttempts = async function () {
   this.lockUntil = null;
   await this.save();
 };
+
+userSchema.methods.touchPresence = async function () {
+  this.lastSeenAt = new Date();
+  await this.save();
+};
+
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
 
 const User = mongoose.model('User', userSchema);
 

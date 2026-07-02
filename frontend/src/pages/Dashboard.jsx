@@ -4,7 +4,8 @@ import { AuthContext } from '../context/AuthContext';
 import { api } from '../services/api';
 import CreateProjectModal from '../components/CreateProjectModal';
 import NotificationBell from '../components/NotificationBell';
-import { Kanban, Folder, Plus, LogOut, User, Calendar } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
+import { Kanban, Folder, Plus, LogOut, User, Calendar, Settings as SettingsIcon } from 'lucide-react';
 
 const Dashboard = () => {
   const [projects, setProjects] = useState([]);
@@ -51,6 +52,14 @@ const Dashboard = () => {
               <span className="sidebar-user-email">{user?.email}</span>
             </div>
           </div>
+        </div>
+
+        <div className="sidebar-bottom">
+          <Link to="/settings" className="settings-link-btn" title="Settings">
+            <SettingsIcon size={18} />
+            <span>Settings</span>
+          </Link>
+          <ThemeToggle variant="simple" />
         </div>
 
         <button className="logout-btn" onClick={logout}>

@@ -1,17 +1,46 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, UserPlus, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
+import { useSocket } from '../context/SocketContext';
 import useModal from '../hooks/useModal';
+
+const ONLINE_THRESHOLD_MS = 90 * 1000;
 
 const MembersModal = ({ project, currentUser, onClose, onMembersUpdated }) => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [presence, setPresence] = useState({});
   const containerRef = useRef(null);
+  const { socket } = useSocket();
 
   const isOwner = project.owner._id === currentUser?._id;
 
   useModal(true, onClose, containerRef);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handlePresence = ({ userId, isOnline, lastSeenAt }) => {
+      setPresence((prev) => ({
+        ...prev,
+        [String(userId)]: { isOnline, lastSeenAt },
+      }));
+    };
+
+    socket.on('presence:update', handlePresence);
+    return () => socket.off('presence:update', handlePresence);
+  }, [socket]);
+
+  const isMemberOnline = (memberId) => {
+    const p = presence[String(memberId)];
+    if (!p) return false;
+    if (p.isOnline) return true;
+    if (p.lastSeenAt) {
+      return Date.now() - new Date(p.lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
+    }
+    return false;
+  };
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -64,31 +93,42 @@ const MembersModal = ({ project, currentUser, onClose, onMembersUpdated }) => {
         {error && <div className="auth-error modal-error-block">{error}</div>}
 
         <div className="member-list">
-          {project.members.map((member) => (
-            <div className="member-row" key={member._id}>
-              <div className="member-info">
-                <div className="sidebar-user-avatar member-avatar-sm">
-                  {member.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div className="member-name">
-                    {member.name}
-                    {member._id === project.owner._id && <span className="owner-tag">Owner</span>}
+          {project.members.map((member) => {
+            const online = isMemberOnline(member._id) || member._id === currentUser?._id;
+            return (
+              <div className="member-row" key={member._id}>
+                <div className="member-info">
+                  <div className="member-avatar-wrapper">
+                    <div className="sidebar-user-avatar member-avatar-sm">
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span
+                      className={`member-presence-dot ${online ? 'member-online' : 'member-offline'}`}
+                      title={online ? 'Online' : 'Offline'}
+                      aria-label={online ? 'Online' : 'Offline'}
+                    />
                   </div>
-                  <div className="member-email">{member.email}</div>
+                  <div>
+                    <div className="member-name">
+                      {member.name}
+                      {member._id === project.owner._id && <span className="owner-tag">Owner</span>}
+                      {member._id === currentUser?._id && <span className="you-tag">You</span>}
+                    </div>
+                    <div className="member-email">{member.email}</div>
+                  </div>
                 </div>
+                {isOwner && member._id !== project.owner._id && (
+                  <button
+                    className="icon-btn-danger"
+                    onClick={() => handleRemove(member._id)}
+                    aria-label={`Remove ${member.name}`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
-              {isOwner && member._id !== project.owner._id && (
-                <button
-                  className="icon-btn-danger"
-                  onClick={() => handleRemove(member._id)}
-                  aria-label={`Remove ${member.name}`}
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {isOwner && (
