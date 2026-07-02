@@ -1211,3 +1211,215 @@ input[type="date"] {
     margin-left: 0;
   }
 }
+
+.board-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.board-body-with-activity .board-columns {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-panel {
+  flex: 0 0 320px;
+  border-left: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 200px);
+  overflow: hidden;
+}
+
+.activity-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-sm);
+}
+
+.activity-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.activity-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.activity-filter-select {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  max-width: 150px;
+}
+
+.activity-filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.activity-panel-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.activity-panel-close:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.activity-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.activity-empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  padding: var(--spacing-lg) var(--spacing-sm);
+}
+
+.activity-empty.activity-error {
+  color: var(--color-danger);
+}
+
+.activity-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+  animation: activityFadeIn 0.25s ease;
+}
+
+.activity-item:hover {
+  background-color: var(--color-surface-hover);
+}
+
+@keyframes activityFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-summary {
+  font-size: 13px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.activity-actor {
+  font-weight: 700;
+  color: var(--color-text);
+}
+.activity-text {
+  color: var(--color-text-muted);
+}
+
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: 2px;
+}
+
+.activity-time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.activity-task-link {
+  font-size: 10px;
+  color: var(--color-primary);
+  font-family: monospace;
+  background-color: rgba(99, 102, 241, 0.1);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.activity-load-more {
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  margin-top: var(--spacing-xs);
+}
+
+.activity-load-more:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.activity-load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1024px) {
+  .activity-panel {
+    flex: 0 0 280px;
+  }
+}
+
+@media (max-width: 768px) {
+  .board-body {
+    flex-direction: column;
+  }
+  .activity-panel {
+    flex: none;
+    max-height: 300px;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
+}

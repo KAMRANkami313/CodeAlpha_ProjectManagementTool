@@ -2,6 +2,7 @@ import Task from '../models/Task.js';
 import AppError from '../utils/AppError.js';
 import { broadcastToProject } from './realtimeService.js';
 import { notifyUser } from './notificationService.js';
+import { recordActivity } from './activityService.js';
 
 const isMember = (project, userId) =>
   project?.members?.some((m) => m.toString?.() === userId.toString());
@@ -33,6 +34,12 @@ const buildTaskPayload = async (task) => {
   return task;
 };
 
+const labelsEqual = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+  const norm = (arr) => arr.map((l) => `${l.name}|${l.color}`).sort();
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+};
+
 const createTask = async ({ project, body, actor }) => {
   assertMember(project, actor._id);
   assertCanAssign(project, body.assignedTo);
@@ -61,6 +68,15 @@ const createTask = async ({ project, body, actor }) => {
   const populated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:created', populated);
 
+  await recordActivity({
+    project: project._id,
+    actor: actor._id,
+    type: 'TASK_CREATED',
+    summary: `${actor.name} created task "${task.title}"`,
+    task: task._id,
+    metadata: { status: task.status, priority: task.priority },
+  });
+
   if (body.assignedTo && body.assignedTo !== actor._id.toString()) {
     await notifyUser({
       recipient: body.assignedTo,
@@ -69,6 +85,14 @@ const createTask = async ({ project, body, actor }) => {
       message: `${actor.name} assigned you the task "${task.title}"`,
       project: project._id,
       task: task._id,
+    });
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_ASSIGNED',
+      summary: `${actor.name} assigned "${task.title}"`,
+      task: task._id,
+      metadata: { assigneeId: body.assignedTo },
     });
   }
 
@@ -83,7 +107,10 @@ const updateTask = async ({ task, project, body, actor }) => {
   }
 
   const previousStatus = task.status;
+  const previousPriority = task.priority;
   const previousAssignee = task.assignedTo ? task.assignedTo.toString() : null;
+  const previousDueDate = task.dueDate ? new Date(task.dueDate).toISOString() : null;
+  const previousLabels = task.labels.map((l) => ({ name: l.name, color: l.color }));
 
   if (body.title !== undefined) task.title = body.title;
   if (body.description !== undefined) task.description = body.description;
@@ -106,18 +133,15 @@ const updateTask = async ({ task, project, body, actor }) => {
 
   broadcastToProject(project._id, 'task:updated', updated);
 
-  if (body.assignedTo && body.assignedTo !== previousAssignee && body.assignedTo !== actor._id.toString()) {
-    await notifyUser({
-      recipient: body.assignedTo,
-      sender: actor._id,
-      type: 'TASK_ASSIGNED',
-      message: `${actor.name} assigned you the task "${task.title}"`,
-      project: project._id,
-      task: task._id,
-    });
-  }
-
   if (body.status && body.status !== previousStatus) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_STATUS_CHANGED',
+      summary: `${actor.name} moved "${task.title}" to ${body.status}`,
+      task: task._id,
+      metadata: { from: previousStatus, to: body.status },
+    });
     const recipient = task.assignedTo && task.assignedTo.toString() !== actor._id.toString()
       ? task.assignedTo
       : previousAssignee && previousAssignee !== actor._id.toString()
@@ -135,6 +159,88 @@ const updateTask = async ({ task, project, body, actor }) => {
     }
   }
 
+  if (body.priority && body.priority !== previousPriority) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_PRIORITY_CHANGED',
+      summary: `${actor.name} changed "${task.title}" priority from ${previousPriority} to ${body.priority}`,
+      task: task._id,
+      metadata: { from: previousPriority, to: body.priority },
+    });
+  }
+
+  if (body.assignedTo !== undefined) {
+    const newAssignee = body.assignedTo || null;
+    const newId = newAssignee ? newAssignee.toString() : null;
+    if (newId !== previousAssignee) {
+      if (newId && newId !== actor._id.toString()) {
+        await notifyUser({
+          recipient: newId,
+          sender: actor._id,
+          type: 'TASK_ASSIGNED',
+          message: `${actor.name} assigned you the task "${task.title}"`,
+          project: project._id,
+          task: task._id,
+        });
+        await recordActivity({
+          project: project._id,
+          actor: actor._id,
+          type: 'TASK_ASSIGNED',
+          summary: `${actor.name} assigned "${task.title}"`,
+          task: task._id,
+          metadata: { assigneeId: newId },
+        });
+      } else if (!newId && previousAssignee) {
+        await recordActivity({
+          project: project._id,
+          actor: actor._id,
+          type: 'TASK_UNASSIGNED',
+          summary: `${actor.name} unassigned "${task.title}"`,
+          task: task._id,
+          metadata: { previousAssigneeId: previousAssignee },
+        });
+      }
+    }
+  }
+
+  if (body.dueDate !== undefined) {
+    const newDue = task.dueDate ? new Date(task.dueDate).toISOString() : null;
+    if (newDue !== previousDueDate) {
+      await recordActivity({
+        project: project._id,
+        actor: actor._id,
+        type: 'TASK_DUE_DATE_CHANGED',
+        summary: newDue
+          ? `${actor.name} set due date for "${task.title}" to ${new Date(newDue).toLocaleDateString()}`
+          : `${actor.name} removed due date from "${task.title}"`,
+        task: task._id,
+        metadata: { from: previousDueDate, to: newDue },
+      });
+    }
+  }
+
+  if (Array.isArray(body.labels) && !labelsEqual(previousLabels, body.labels)) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_LABELS_CHANGED',
+      summary: `${actor.name} updated labels on "${task.title}"`,
+      task: task._id,
+      metadata: { count: body.labels.length },
+    });
+  }
+
+  if (!body.status && !body.priority && body.assignedTo === undefined && body.dueDate === undefined && !Array.isArray(body.labels)) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_UPDATED',
+      summary: `${actor.name} updated "${task.title}"`,
+      task: task._id,
+    });
+  }
+
   return updated;
 };
 
@@ -148,6 +254,15 @@ const archiveTask = async ({ task, project, actor }) => {
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  await recordActivity({
+    project: project._id,
+    actor: actor._id,
+    type: 'TASK_ARCHIVED',
+    summary: `${actor.name} archived "${task.title}"`,
+    task: task._id,
+  });
+
   return updated;
 };
 
@@ -161,6 +276,15 @@ const unarchiveTask = async ({ task, project, actor }) => {
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  await recordActivity({
+    project: project._id,
+    actor: actor._id,
+    type: 'TASK_UNARCHIVED',
+    summary: `${actor.name} restored "${task.title}" from archive`,
+    task: task._id,
+  });
+
   return updated;
 };
 
@@ -173,6 +297,7 @@ const reorderTask = async ({ task, project, newStatus, newPosition, actor }) => 
 
   const targetStatus = newStatus || task.status;
   const targetPosition = typeof newPosition === 'number' ? newPosition : task.position;
+  const previousStatus = task.status;
 
   if (targetStatus !== task.status) {
     task.status = targetStatus;
@@ -207,6 +332,17 @@ const reorderTask = async ({ task, project, newStatus, newPosition, actor }) => 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
 
+  if (targetStatus !== previousStatus) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'TASK_STATUS_CHANGED',
+      summary: `${actor.name} moved "${task.title}" to ${targetStatus}`,
+      task: task._id,
+      metadata: { from: previousStatus, to: targetStatus, via: 'drag-drop' },
+    });
+  }
+
   const allTasks = await Task.find({ project: project._id, status: targetStatus })
     .populate('assignedTo', 'name email')
     .populate('createdBy', 'name email')
@@ -234,6 +370,16 @@ const addSubtask = async ({ task, project, title, actor }) => {
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  await recordActivity({
+    project: project._id,
+    actor: actor._id,
+    type: 'SUBTASK_CREATED',
+    summary: `${actor.name} added subtask "${title.trim()}" to "${task.title}"`,
+    task: task._id,
+    metadata: { subtaskTitle: title.trim() },
+  });
+
   return updated;
 };
 
@@ -242,6 +388,7 @@ const toggleSubtask = async ({ task, project, subtaskId, done, actor }) => {
   const sub = task.subtasks.id(subtaskId);
   if (!sub) throw new AppError('Subtask not found', 404);
 
+  const previousDone = sub.done;
   sub.done = Boolean(done);
   sub.completedAt = sub.done ? new Date() : null;
   await task.save();
@@ -255,6 +402,18 @@ const toggleSubtask = async ({ task, project, subtaskId, done, actor }) => {
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  if (previousDone !== sub.done) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'SUBTASK_TOGGLED',
+      summary: `${actor.name} ${sub.done ? 'completed' : 'unchecked'} subtask "${sub.title}" on "${task.title}"`,
+      task: task._id,
+      metadata: { subtaskId: sub._id, subtaskTitle: sub.title, done: sub.done },
+    });
+  }
+
   return updated;
 };
 
@@ -262,6 +421,7 @@ const updateSubtask = async ({ task, project, subtaskId, title, actor }) => {
   assertMember(project, actor._id);
   const sub = task.subtasks.id(subtaskId);
   if (!sub) throw new AppError('Subtask not found', 404);
+  const previousTitle = sub.title;
   if (title !== undefined) {
     if (!title.trim()) throw new AppError('Subtask title cannot be empty', 400);
     sub.title = title.trim();
@@ -270,6 +430,18 @@ const updateSubtask = async ({ task, project, subtaskId, title, actor }) => {
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  if (title !== undefined && title.trim() !== previousTitle) {
+    await recordActivity({
+      project: project._id,
+      actor: actor._id,
+      type: 'SUBTASK_UPDATED',
+      summary: `${actor.name} renamed subtask on "${task.title}"`,
+      task: task._id,
+      metadata: { subtaskId: sub._id, from: previousTitle, to: title.trim() },
+    });
+  }
+
   return updated;
 };
 
@@ -277,11 +449,22 @@ const deleteSubtask = async ({ task, project, subtaskId, actor }) => {
   assertMember(project, actor._id);
   const sub = task.subtasks.id(subtaskId);
   if (!sub) throw new AppError('Subtask not found', 404);
+  const subtaskTitle = sub.title;
   sub.deleteOne();
   await task.save();
 
   const updated = await buildTaskPayload(task);
   broadcastToProject(project._id, 'task:updated', updated);
+
+  await recordActivity({
+    project: project._id,
+    actor: actor._id,
+    type: 'SUBTASK_DELETED',
+    summary: `${actor.name} removed subtask "${subtaskTitle}" from "${task.title}"`,
+    task: task._id,
+    metadata: { subtaskTitle },
+  });
+
   return updated;
 };
 
@@ -290,6 +473,7 @@ const deleteTask = async ({ task, project, actor }) => {
 
   const projectId = project._id;
   const taskId = task._id;
+  const taskTitle = task.title;
 
   const { default: Comment } = await import('../models/Comment.js');
   const { default: withTransaction } = await import('../utils/withTransaction.js');
@@ -300,6 +484,15 @@ const deleteTask = async ({ task, project, actor }) => {
   });
 
   broadcastToProject(projectId, 'task:deleted', { taskId, projectId });
+
+  await recordActivity({
+    project: projectId,
+    actor: actor._id,
+    type: 'TASK_DELETED',
+    summary: `${actor.name} deleted task "${taskTitle}"`,
+    task: null,
+    metadata: { taskTitle },
+  });
 };
 
 export {

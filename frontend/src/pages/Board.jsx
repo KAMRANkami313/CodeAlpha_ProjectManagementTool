@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Users, Archive } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Archive, Activity as ActivityIcon } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import useProjectRoom from '../hooks/useProjectRoom';
@@ -13,6 +13,7 @@ import MembersModal from '../components/MembersModal';
 import NotificationBell from '../components/NotificationBell';
 import ReconnectionBanner from '../components/ReconnectionBanner';
 import TaskFilterBar from '../components/TaskFilterBar';
+import ActivityPanel from '../components/ActivityPanel';
 
 const STATUSES = ['Todo', 'In Progress', 'In Review', 'Done'];
 
@@ -62,6 +63,7 @@ const Board = () => {
   const [createStatus, setCreateStatus] = useState('Todo');
   const [showMembers, setShowMembers] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const debouncedSearch = useDebounce(filters.search, 300);
@@ -269,6 +271,15 @@ const Board = () => {
 
         <div className="board-header-right">
           <button
+            className={`btn-secondary ${showActivity ? 'btn-secondary-active' : ''}`}
+            onClick={() => setShowActivity((v) => !v)}
+            title="Toggle activity panel"
+            aria-pressed={showActivity}
+          >
+            <ActivityIcon size={16} />
+            <span>Activity</span>
+          </button>
+          <button
             className={`btn-secondary ${showArchived ? 'btn-secondary-active' : ''}`}
             onClick={() => setShowArchived((v) => !v)}
             title={showArchived ? 'Hide archived tasks' : 'Show archived tasks'}
@@ -300,23 +311,29 @@ const Board = () => {
         </div>
       )}
 
-      <div className="board-columns">
-        {STATUSES.map((status) => (
-          <TaskColumn
-            key={status}
-            status={status}
-            tasks={tasks
-              .filter((t) => t.status === status)
-              .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))}
-            onTaskClick={(task) => setActiveTask(task)}
-            onAddClick={(s) => {
-              setCreateStatus(s);
-              setEditingTask(null);
-            }}
-            onDrop={handleDrop}
-            onDragStart={handleDragStart}
-          />
-        ))}
+      <div className={`board-body ${showActivity ? 'board-body-with-activity' : ''}`}>
+        <div className="board-columns">
+          {STATUSES.map((status) => (
+            <TaskColumn
+              key={status}
+              status={status}
+              tasks={tasks
+                .filter((t) => t.status === status)
+                .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))}
+              onTaskClick={(task) => setActiveTask(task)}
+              onAddClick={(s) => {
+                setCreateStatus(s);
+                setEditingTask(null);
+              }}
+              onDrop={handleDrop}
+              onDragStart={handleDragStart}
+            />
+          ))}
+        </div>
+
+        {showActivity && (
+          <ActivityPanel projectId={projectId} onClose={() => setShowActivity(false)} />
+        )}
       </div>
 
       <button

@@ -25,6 +25,7 @@ import {
   applyPrioritySort,
   buildMeta,
 } from '../services/taskQueryService.js';
+import { recordActivity } from '../services/activityService.js';
 
 const ensureProjectMember = (project, userId) => {
   if (!project) {
@@ -209,6 +210,15 @@ const addTaskComment = asyncHandler(async (req, res) => {
   broadcastToProject(task.project._id, 'comment:created', {
     taskId: task._id,
     comment: populatedComment,
+  });
+
+  await recordActivity({
+    project: task.project._id,
+    actor: req.user._id,
+    type: 'COMMENT_CREATED',
+    summary: `${req.user.name} commented on "${task.title}"`,
+    task: task._id,
+    metadata: { commentId: comment._id, preview: content.slice(0, 80) },
   });
 
   const watchers = new Set();
