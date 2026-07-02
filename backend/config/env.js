@@ -39,6 +39,10 @@ export const env = {
   accountLockMinutes: toInt(process.env.ACCOUNT_LOCK_MINUTES, 15),
 
   clientUrl: required('CLIENT_URL'),
+  clientUrls: required('CLIENT_URL')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 
   logLevel: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
 

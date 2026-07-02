@@ -35,7 +35,12 @@ app.use(helmet());
 app.use(compression());
 app.use(
   cors({
-    origin: env.clientUrl,
+    origin(origin, cb) {
+      if (!origin || env.clientUrls.includes(origin)) {
+        return cb(null, true);
+      }
+      return cb(new Error(`CORS blocked: ${origin}`));
+    },
     credentials: true,
   })
 );

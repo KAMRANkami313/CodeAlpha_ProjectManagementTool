@@ -36,8 +36,13 @@ const broadcastPresenceToProjects = async (userId, isOnline) => {
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: env.clientUrl,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      origin(origin, cb) {
+        if (!origin || env.clientUrls.includes(origin)) {
+          return cb(null, true);
+        }
+        return cb(new Error(`Socket CORS blocked: ${origin}`));
+      },
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
       credentials: true,
     },
   });
