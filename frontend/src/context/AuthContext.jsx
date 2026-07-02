@@ -49,12 +49,38 @@ export const AuthProvider = ({ children }) => {
   }, [getAccessToken, getRefreshToken, onTokensRefreshed]);
 
   const persistSession = (data) => {
-    const sessionUser = { _id: data._id, name: data.name, email: data.email };
+    const sessionUser = {
+      _id: data._id,
+      name: data.name,
+      email: data.email,
+      avatar: data.avatar || '',
+      bio: data.bio || '',
+      preferences: data.preferences || {},
+    };
     localStorage.setItem(TOKEN_STORAGE_KEYS.access, data.accessToken);
     localStorage.setItem(TOKEN_STORAGE_KEYS.refresh, data.refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(sessionUser));
     setUser(sessionUser);
   };
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const profile = await api.get('/users/profile');
+      const sessionUser = {
+        _id: profile._id,
+        name: profile.name,
+        email: profile.email,
+        avatar: profile.avatar || '',
+        bio: profile.bio || '',
+        preferences: profile.preferences || {},
+      };
+      localStorage.setItem(USER_KEY, JSON.stringify(sessionUser));
+      setUser(sessionUser);
+      return sessionUser;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const login = async (email, password) => {
     const data = await api.post('/users/login', { email, password });
@@ -99,7 +125,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        await api.get('/users/profile');
+        await refreshProfile();
       } catch {
         clearStoredSession();
         setUser(null);
@@ -109,7 +135,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     validateSession();
-  }, []);
+  }, [refreshProfile]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -123,7 +149,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, initializing, login, register, logout, logoutAll }}
+      value={{ user, initializing, login, register, logout, logoutAll, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

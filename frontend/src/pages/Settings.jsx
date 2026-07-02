@@ -18,9 +18,10 @@ import { AuthContext } from '../context/AuthContext';
 import { usePreferences } from '../context/PreferencesContext';
 import { api } from '../services/api';
 import ThemeToggle from '../components/ThemeToggle';
+import Avatar from '../components/Avatar';
 
 const Settings = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, refreshProfile } = useContext(AuthContext);
   const { emailNotifications, compactView, updateEmailNotifications, updateCompactView, updateTheme, themePreference } = usePreferences();
 
   const [name, setName] = useState(user?.name || '');
@@ -61,6 +62,7 @@ const Settings = () => {
     setProfileSuccess(false);
     try {
       await api.put('/users/profile', { name, bio, avatar });
+      await refreshProfile();
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
@@ -125,6 +127,14 @@ const Settings = () => {
           )}
 
           <form onSubmit={handleSaveProfile} className="settings-form">
+            <div className="settings-avatar-preview">
+              <Avatar src={avatar} name={name || user?.name} size="xl" />
+              <div className="settings-avatar-hint">
+                <p className="settings-toggle-label">Profile picture</p>
+                <p className="settings-toggle-hint">Paste a direct image URL below. Preview updates live.</p>
+              </div>
+            </div>
+
             <div className="form-group">
               <label htmlFor="name">Full Name</label>
               <input

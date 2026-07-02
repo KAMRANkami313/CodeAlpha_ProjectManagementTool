@@ -31,7 +31,7 @@ const createProject = asyncHandler(async (req, res) => {
     members: [req.user._id],
   });
 
-  const populated = await project.populate('owner', 'name email');
+  const populated = await project.populate('owner', 'name email avatar');
 
   await recordActivity({
     project: project._id,
@@ -50,7 +50,7 @@ const getProjects = asyncHandler(async (req, res) => {
     const { page, limit, skip } = parsePagination(req);
     const [projects, total] = await Promise.all([
       Project.find(filter)
-        .populate('owner', 'name email')
+        .populate('owner', 'name email avatar')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -60,7 +60,7 @@ const getProjects = asyncHandler(async (req, res) => {
   }
 
   const projects = await Project.find(filter)
-    .populate('owner', 'name email')
+    .populate('owner', 'name email avatar')
     .sort({ createdAt: -1 });
 
   res.json(projects);
@@ -68,8 +68,8 @@ const getProjects = asyncHandler(async (req, res) => {
 
 const getProjectById = asyncHandler(async (req, res) => {
   const project = await Project.findById(req.params.id)
-    .populate('owner', 'name email')
-    .populate('members', 'name email');
+    .populate('owner', 'name email avatar')
+    .populate('members', 'name email avatar');
 
   if (!project) {
     throw new AppError('Project not found', 404);
@@ -159,7 +159,7 @@ const addProjectMember = asyncHandler(async (req, res) => {
   project.members.push(userToAdd._id);
   await project.save();
 
-  const populatedProject = await project.populate('members', 'name email');
+  const populatedProject = await project.populate('members', 'name email avatar');
 
   broadcastToProject(project._id, 'project:memberAdded', {
     projectId: project._id,
@@ -241,7 +241,7 @@ const getProjectActivity = asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req);
   const [activities, total] = await Promise.all([
     Activity.find(filter)
-      .populate('actor', 'name email')
+      .populate('actor', 'name email avatar')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),

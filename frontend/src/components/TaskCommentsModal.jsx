@@ -1,10 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Send, Pencil, Check, Clock, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Send, Pencil, Check, Clock, AlertCircle, AtSign } from 'lucide-react';
 import { api } from '../services/api';
 import { useSocket } from '../context/SocketContext';
 import useModal from '../hooks/useModal';
+import useTypingIndicator from '../hooks/useTypingIndicator';
+import useMentions from '../hooks/useMentions';
+import Avatar from './Avatar';
 
-const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }) => {
+const renderCommentContent = (content, members) => {
+  if (!content) return null;
+  if (!members?.length) return content;
+
+  const escaped = content.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  let html = escaped;
+
+  for (const m of members) {
+    const nameEscaped = m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameHtmlEscaped = m.name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const regex = new RegExp(`@(${nameEscaped})`, 'g');
+    html = html.replace(regex, `<span class="mention" data-user-id="${m._id}">@${nameHtmlEscaped}</span>`);
+  }
+
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
+const TaskCommentsModal = ({ task, projectId, members, currentUser, onClose, onEdit, onTaskUpdated }) => {
   const [comments, setComments] = useState([]);
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -14,6 +34,23 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
   const { socket } = useSocket();
   const bottomRef = useRef(null);
   const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const { isAnyoneTyping, typingText, startTyping, stopTyping } = useTypingIndicator({
+    taskId: task._id,
+    projectId,
+    currentUserId: currentUser?._id,
+  });
+
+  const {
+    isMentioning,
+    suggestions,
+    selectedIndex,
+    detectMention,
+    clearMention,
+    applyMention,
+    moveSelection,
+  } = useMentions({ members, currentUser });
 
   useModal(true, onClose, containerRef);
 
@@ -47,6 +84,7 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
       setComments((prev) =>
         prev.some((c) => c._id === payload.comment._id) ? prev : [...prev, payload.comment]
       );
+      stopTyping();
     };
 
     const handleTaskUpdated = (updated) => {
@@ -62,28 +100,88 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
       socket.off('comment:created', handleNewComment);
       socket.off('task:updated', handleTaskUpdated);
     };
-  }, [socket, task._id, onTaskUpdated]);
+  }, [socket, task._id, onTaskUpdated, stopTyping]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!content.trim()) return;
+  useEffect(() => {
+    if (!isAnyoneTyping) return;
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [isAnyoneTyping, typingText]);
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setContent(value);
+    detectMention(value, e.target.selectionStart);
+    if (value.trim()) {
+      startTyping();
+    } else {
+      stopTyping();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (isMentioning && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveSelection('down');
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection('up');
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = suggestions[selectedIndex];
+        if (selected) {
+          const newValue = applyMention(inputRef, selected);
+          setContent(newValue);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearMention();
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleSuggestionClick = (member) => {
+    const newValue = applyMention(inputRef, member);
+    setContent(newValue);
+  };
+
+  const handleSend = async () => {
+    if (!content.trim() || sending) return;
     setSending(true);
     setError('');
+    stopTyping();
     try {
       const newComment = await api.post(`/tasks/${task._id}/comments`, { content });
       setComments((prev) =>
         prev.some((c) => c._id === newComment._id) ? prev : [...prev, newComment]
       );
       setContent('');
+      clearMention();
     } catch (err) {
       setError(err.message || 'Failed to post comment');
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    handleSend();
   };
 
   const handleToggleSubtask = async (subtaskId, currentDone) => {
@@ -106,6 +204,8 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
   const subtaskTotal = localTask.subtasks?.length || 0;
   const subtaskDone = localTask.subtasks?.filter((s) => s.done).length || 0;
   const isOverdue = localTask.dueDate && localTask.status !== 'Done' && new Date(localTask.dueDate) < new Date();
+
+  const renderedMembers = useMemo(() => members || [], [members]);
 
   return (
     <div className="modal-overlay animate-fade-in" onClick={handleOverlayClick}>
@@ -200,7 +300,7 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
                 key={comment._id}
                 className={`comment-item ${comment.user._id === currentUser?._id ? 'comment-own' : ''}`}
               >
-                <div className="comment-avatar">{comment.user.name.charAt(0).toUpperCase()}</div>
+                <Avatar src={comment.user.avatar} name={comment.user.name} size="sm" className="comment-avatar" />
                 <div className="comment-bubble">
                   <div className="comment-meta">
                     <span className="comment-author">{comment.user.name}</span>
@@ -211,28 +311,64 @@ const TaskCommentsModal = ({ task, currentUser, onClose, onEdit, onTaskUpdated }
                       })}
                     </span>
                   </div>
-                  <p>{comment.content}</p>
+                  <p>{renderCommentContent(comment.content, renderedMembers)}</p>
                 </div>
               </div>
             ))
+          )}
+          {isAnyoneTyping && (
+            <div className="typing-indicator" aria-live="polite">
+              <span className="typing-dots">
+                <span /> <span /> <span />
+              </span>
+              <span className="typing-text">{typingText}</span>
+            </div>
           )}
           <div ref={bottomRef} />
         </div>
 
         {error && <div className="auth-error modal-error-inline">{error}</div>}
 
-        <form className="comment-input-row" onSubmit={handleSend}>
-          <input
-            type="text"
-            placeholder="Write a comment..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            disabled={sending}
-          />
+        <form className="comment-input-row" onSubmit={handleSubmit}>
+          <div className="comment-input-wrapper">
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Write a comment… (use @ to mention)"
+              value={content}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              disabled={sending}
+              aria-label="Write a comment"
+            />
+            {isMentioning && suggestions.length > 0 && (
+              <div className="mention-suggestions" role="listbox" aria-label="Mention suggestions">
+                {suggestions.map((m, idx) => (
+                  <button
+                    key={m._id}
+                    type="button"
+                    className={`mention-suggestion ${idx === selectedIndex ? 'mention-suggestion-active' : ''}`}
+                    onClick={() => handleSuggestionClick(m)}
+                    role="option"
+                    aria-selected={idx === selectedIndex}
+                  >
+                    <Avatar src={m.avatar} name={m.name} size="xs" />
+                    <span className="mention-suggestion-name">{m.name}</span>
+                    <span className="mention-suggestion-email">{m.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button type="submit" className="auth-btn comment-send-btn" disabled={sending || !content.trim()}>
             <Send size={16} />
           </button>
         </form>
+
+        <div className="comment-input-hint">
+          <AtSign size={11} />
+          <span>Type @ to mention a project member · Press Enter to send · Shift+Enter for newline</span>
+        </div>
       </div>
     </div>
   );

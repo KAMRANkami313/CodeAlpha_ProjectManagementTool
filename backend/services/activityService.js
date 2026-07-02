@@ -21,7 +21,7 @@ const recordActivity = async ({
       metadata,
     });
 
-    const populated = await activity.populate('actor', 'name email');
+    const populated = await activity.populate('actor', 'name email avatar');
 
     if (emit) {
       broadcastToProject(project, 'activity:new', populated);

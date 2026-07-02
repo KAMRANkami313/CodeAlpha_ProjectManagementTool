@@ -3,6 +3,7 @@ import { X, UserPlus, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import { useSocket } from '../context/SocketContext';
 import useModal from '../hooks/useModal';
+import Avatar from './Avatar';
 
 const ONLINE_THRESHOLD_MS = 90 * 1000;
 
@@ -98,16 +99,13 @@ const MembersModal = ({ project, currentUser, onClose, onMembersUpdated }) => {
             return (
               <div className="member-row" key={member._id}>
                 <div className="member-info">
-                  <div className="member-avatar-wrapper">
-                    <div className="sidebar-user-avatar member-avatar-sm">
-                      {member.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span
-                      className={`member-presence-dot ${online ? 'member-online' : 'member-offline'}`}
-                      title={online ? 'Online' : 'Offline'}
-                      aria-label={online ? 'Online' : 'Offline'}
-                    />
-                  </div>
+                  <Avatar
+                    src={member.avatar}
+                    name={member.name}
+                    size="sm"
+                    showPresence
+                    isOnline={online}
+                  />
                   <div>
                     <div className="member-name">
                       {member.name}

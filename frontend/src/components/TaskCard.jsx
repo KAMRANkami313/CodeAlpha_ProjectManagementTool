@@ -1,4 +1,5 @@
 import { Calendar, User, CheckSquare, AlertCircle, Archive } from 'lucide-react';
+import Avatar from './Avatar';
 
 const priorityClass = {
   Low: 'priority-low',
@@ -95,9 +96,7 @@ const TaskCard = ({ task, onClick, onDragStart }) => {
           <span className="task-unassigned">Unassigned</span>
         )}
         {task.assignedTo ? (
-          <div className="task-assignee-avatar" title={task.assignedTo.name}>
-            {task.assignedTo.name.charAt(0).toUpperCase()}
-          </div>
+          <Avatar src={task.assignedTo.avatar} name={task.assignedTo.name} size="xs" className="task-assignee-avatar" />
         ) : (
           <div className="task-assignee-avatar task-assignee-empty" title="Unassigned">?</div>
         )}

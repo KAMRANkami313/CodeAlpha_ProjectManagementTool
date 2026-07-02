@@ -118,6 +118,23 @@ const initSocket = (server) => {
       }
     });
 
+    socket.on('comment:typing', ({ taskId, projectId }) => {
+      if (!taskId || !projectId) return;
+      socket.to(`project:${projectId}`).emit('comment:typing', {
+        taskId,
+        userId: String(socket.userId),
+        userName: socket.user?.name || 'Someone',
+      });
+    });
+
+    socket.on('comment:stopTyping', ({ taskId, projectId }) => {
+      if (!taskId || !projectId) return;
+      socket.to(`project:${projectId}`).emit('comment:stopTyping', {
+        taskId,
+        userId: String(socket.userId),
+      });
+    });
+
     socket.on('disconnect', async (reason) => {
       logger.info({ userId: socket.userId, reason }, 'Socket disconnected');
       setTimeout(async () => {

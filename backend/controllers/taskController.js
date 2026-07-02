@@ -26,6 +26,7 @@ import {
   buildMeta,
 } from '../services/taskQueryService.js';
 import { recordActivity } from '../services/activityService.js';
+import { notifyMentions, parseMentions } from '../services/mentionService.js';
 
 const ensureProjectMember = (project, userId) => {
   if (!project) {
@@ -65,8 +66,8 @@ const getProjectTasks = asyncHandler(async (req, res) => {
   const sortByPriority = (req.query.sortBy || '').trim() === 'priority';
 
   let tasks = await Task.find(filter)
-    .populate('assignedTo', 'name email')
-    .populate('createdBy', 'name email')
+    .populate('assignedTo', 'name email avatar')
+    .populate('createdBy', 'name email avatar')
     .sort(sort);
 
   if (sortByPriority) {
@@ -85,8 +86,8 @@ const getProjectTasks = asyncHandler(async (req, res) => {
 
 const getTaskById = asyncHandler(async (req, res) => {
   const task = await Task.findById(req.params.id)
-    .populate('assignedTo', 'name email')
-    .populate('createdBy', 'name email')
+    .populate('assignedTo', 'name email avatar')
+    .populate('createdBy', 'name email avatar')
     .populate('project', 'name members');
 
   if (!task) {
@@ -205,26 +206,48 @@ const addTaskComment = asyncHandler(async (req, res) => {
     user: req.user._id,
   });
 
-  const populatedComment = await Comment.findById(comment._id).populate('user', 'name email');
+  const populatedComment = await Comment.findById(comment._id).populate('user', 'name email avatar');
 
-  broadcastToProject(task.project._id, 'comment:created', {
+  const projectMembers = await Project.findById(task.project._id)
+    .populate('members', 'name email avatar')
+    .select('members');
+  const memberList = projectMembers?.members || [];
+
+  const mentionedUsers = parseMentions(content, memberList);
+  const mentionIds = mentionedUsers.map((m) => m._id);
+
+  const commentPayload = {
     taskId: task._id,
     comment: populatedComment,
-  });
+    mentions: mentionIds,
+  };
+
+  broadcastToProject(task.project._id, 'comment:created', commentPayload);
 
   await recordActivity({
     project: task.project._id,
     actor: req.user._id,
     type: 'COMMENT_CREATED',
-    summary: `${req.user.name} commented on "${task.title}"`,
+    summary: mentionedUsers.length > 0
+      ? `${req.user.name} commented on "${task.title}" (mentioned ${mentionedUsers.length})`
+      : `${req.user.name} commented on "${task.title}"`,
     task: task._id,
-    metadata: { commentId: comment._id, preview: content.slice(0, 80) },
+    metadata: { commentId: comment._id, preview: content.slice(0, 80), mentions: mentionIds },
+  });
+
+  await notifyMentions({
+    content,
+    members: memberList,
+    actor: req.user,
+    project: task.project._id,
+    task,
   });
 
   const watchers = new Set();
   if (task.assignedTo) watchers.add(task.assignedTo.toString());
   if (task.createdBy) watchers.add(task.createdBy.toString());
   watchers.delete(req.user._id.toString());
+  for (const id of mentionIds) watchers.delete(String(id));
 
   await Promise.all(
     [...watchers].map((recipient) =>
@@ -239,7 +262,9 @@ const addTaskComment = asyncHandler(async (req, res) => {
     )
   );
 
-  res.status(201).json(populatedComment);
+  const response = populatedComment.toObject();
+  response.mentions = mentionIds;
+  res.status(201).json(response);
 });
 
 const getTaskComments = asyncHandler(async (req, res) => {
@@ -254,7 +279,7 @@ const getTaskComments = asyncHandler(async (req, res) => {
   }
 
   const comments = await Comment.find({ task: req.params.id })
-    .populate('user', 'name email')
+    .populate('user', 'name email avatar')
     .sort({ createdAt: 1 });
 
   res.json(comments);

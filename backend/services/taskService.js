@@ -28,8 +28,8 @@ const setStatusTimestamps = (task, newStatus) => {
 
 const buildTaskPayload = async (task) => {
   await task.populate([
-    { path: 'assignedTo', select: 'name email' },
-    { path: 'createdBy', select: 'name email' },
+    { path: 'assignedTo', select: 'name email avatar' },
+    { path: 'createdBy', select: 'name email avatar' },
   ]);
   return task;
 };
@@ -344,8 +344,8 @@ const reorderTask = async ({ task, project, newStatus, newPosition, actor }) => 
   }
 
   const allTasks = await Task.find({ project: project._id, status: targetStatus })
-    .populate('assignedTo', 'name email')
-    .populate('createdBy', 'name email')
+    .populate('assignedTo', 'name email avatar')
+    .populate('createdBy', 'name email avatar')
     .sort({ position: 1, createdAt: 1 });
 
   broadcastToProject(project._id, 'tasks:reordered', {

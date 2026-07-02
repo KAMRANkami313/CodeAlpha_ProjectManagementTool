@@ -363,6 +363,8 @@ const Board = () => {
       {activeTask && (
         <TaskCommentsModal
           task={activeTask}
+          projectId={projectId}
+          members={project.members}
           currentUser={user}
           onClose={() => setActiveTask(null)}
           onEdit={() => {

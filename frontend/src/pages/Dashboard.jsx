@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import CreateProjectModal from '../components/CreateProjectModal';
 import NotificationBell from '../components/NotificationBell';
 import ThemeToggle from '../components/ThemeToggle';
+import Avatar from '../components/Avatar';
 import { Kanban, Folder, Plus, LogOut, User, Calendar, Settings as SettingsIcon } from 'lucide-react';
 
 const Dashboard = () => {
@@ -44,9 +45,7 @@ const Dashboard = () => {
           </div>
 
           <div className="sidebar-user">
-            <div className="sidebar-user-avatar">
-              {user?.name.charAt(0).toUpperCase()}
-            </div>
+            <Avatar src={user?.avatar} name={user?.name} size="lg" className="sidebar-user-avatar" />
             <div className="sidebar-user-info">
               <span className="sidebar-user-name">{user?.name}</span>
               <span className="sidebar-user-email">{user?.email}</span>
